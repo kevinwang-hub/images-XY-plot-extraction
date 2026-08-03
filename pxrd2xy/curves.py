@@ -603,21 +603,40 @@ def extend_traces(curves, labimg, fr, shape, text_cols=None, max_rise: float = 0
             x = int(xs[0] if direction < 0 else xs[-1])
             y = float(ys[0] if direction < 0 else ys[-1])
             added = []
+            gap = max(3, int(round(0.02 * fr.width)))
             while True:
-                x += direction
-                if x < x0 or x > x1 or x in text_cols:
+                # step forward, jumping over columns with no own-colour ink (a dropout, or
+                # a stretch hidden behind figure text) as long as the curve reappears close
+                # to where it left off; a curve runs the full width of the plot, so a short
+                # hole is an occlusion rather than the end of the line
+                nxt, skipped = None, []
+                probe = x
+                for _ in range(gap + 1):
+                    probe += direction
+                    if probe < x0 or probe > x1:
+                        break
+                    col = np.flatnonzero(own[:, probe])
+                    if col.size == 0 or probe in text_cols:
+                        skipped.append(probe)
+                        continue
+                    runs = group_consecutive(col, gap=1)
+                    best = min(runs, key=lambda r: 0.0 if r[0] - 1 <= y <= r[1] + 1
+                               else min(abs(y - r[0]), abs(y - r[1])))
+                    cand = min(best[0] + c.linewidth / 2.0, float(best[1]))
+                    reach = max_rise * Hp if not skipped else max(3.0 * c.linewidth,
+                                                                 0.05 * Hp)
+                    if abs(cand - y) <= reach:
+                        nxt = (probe, cand)
                     break
-                col = np.flatnonzero(own[:, x])
-                if col.size == 0:
+                if nxt is None:
                     break
-                runs = group_consecutive(col, gap=1)
-                best = min(runs, key=lambda r: 0.0 if r[0] - 1 <= y <= r[1] + 1
-                           else min(abs(y - r[0]), abs(y - r[1])))
-                cand = min(best[0] + c.linewidth / 2.0, float(best[1]))
-                if abs(cand - y) > max_rise * Hp:
-                    break
-                y = cand
-                added.append((x, y))
+                nx, ny = nxt
+                for i, sx in enumerate(skipped, 1):      # linear bridge over the hole
+                    added.append((sx, y + (ny - y) * i / (len(skipped) + 1)))
+                added.append((nx, ny))
+                x, y = nx, ny
+            if added:
+                added = [a for a in added if x0 <= a[0] <= x1]
             if added:
                 if direction < 0:
                     added.reverse()
@@ -640,6 +659,112 @@ def extend_traces(curves, labimg, fr, shape, text_cols=None, max_rise: float = 0
                     break
         c.mask = c.mask | m
     return curves
+
+
+def _row_crossings(mask: np.ndarray, y: int, lw: float, max_k: int = 4, min_k: int = 1):
+    """Decompose one row of ink into the line crossings that drew it.
+
+    The figure shows the data thickened by a pen of width `lw`, so a horizontal block of
+    width W at row y was produced by k = round(W / lw) crossings of the pen. If those k
+    crossings are evenly spread, the outermost pen centres sit half a pen width inside the
+    block, giving centres at lw/2 + i*(W - lw)/(k - 1). For W = 1.5*lw this puts the two
+    centres at 1/3 and 2/3 of the block - i.e. the *centre lines*, not the block edges.
+
+    Only near-vertical ink is decomposed (W <= (max_k+0.5)*lw); a long horizontal run is a
+    flat part of a curve and is handled by the column pass instead.
+    """
+    row = np.flatnonzero(mask[y])
+    if row.size == 0:
+        return []
+    out = []
+    for xa, xb in group_consecutive(row, gap=1):
+        W = xb - xa + 1
+        if W > (max_k + 0.5) * lw:
+            continue
+        k = max(1, int(round(W / lw)))
+        if k < min_k:
+            continue
+        if k == 1:
+            out.append((xa + (W - 1) / 2.0, y))
+        else:
+            step = (W - lw) / (k - 1)
+            for i in range(k):
+                out.append((xa + lw / 2.0 - 0.5 + i * step, y))
+    return out
+
+
+def refine_centerlines(curves, labimg, fr, shape, tall: float = 1.6):
+    """Move each trace from the *edge* of its stroke onto the stroke's *centre line*.
+
+    The figure is the data thickened by a pen, so the data is the centre of the stroke.
+    Two situations let us say where that centre is:
+
+      flat runs  - a column whose ink run is no taller than `tall` pen widths is a locally
+                   flat piece of curve, and the centre of the run is the centre line;
+      overlaps   - a row whose ink block is wide enough to hold k >= 2 pen crossings was
+                   drawn by k separate passes of the pen (the flanks of a narrow peak, or
+                   two peaks merged into one solid mass). Their centres follow from the
+                   block width - see _row_crossings - and each is a real curve point, so
+                   the trace is moved onto the nearest one.
+
+    Everywhere else - a column filled by a peak narrower than the pen - the height is not
+    recoverable from that column at all, and the existing peak-preserving estimate is kept
+    rather than replaced by a guess. Deciding this per column, instead of re-deriving the
+    whole trace, is what keeps the correction from wandering between a peak and its
+    baseline in the columns where both are consistent with the ink.
+    """
+    x0, x1, y0, y1 = fr.interior(shape)
+    for c in curves:
+        own = (labimg == c.cluster)
+        lw = max(float(c.linewidth), 1.0)
+        xs = np.asarray(c.xs, int)
+        ys = np.asarray(c.ys, float).copy()
+
+        # resolvable overlaps: only blocks that really imply two or more pen passes
+        multi: dict[int, list] = {}
+        for y in range(y0, y1 + 1):
+            for cx, cy in _row_crossings(own, y, lw, min_k=2):
+                xi = int(round(cx))
+                multi.setdefault(xi, []).append(float(cy))
+
+        n_flat = n_multi = 0
+        for i, x in enumerate(xs):
+            col = np.flatnonzero(own[:, x])
+            if col.size:
+                run = None
+                for a, b in group_consecutive(col, gap=1):
+                    if a - 1 <= ys[i] <= b + 1:
+                        run = (a, b)
+                        break
+                if run is not None and (run[1] - run[0] + 1) <= tall * lw:
+                    ys[i] = (run[0] + run[1]) / 2.0        # flat: centre of the run
+                    n_flat += 1
+                    continue
+            cand = multi.get(int(x))
+            if cand:
+                groups = _group_values(cand, 2.0 * lw)
+                g = min(groups, key=lambda gg: abs(np.median(gg) - ys[i]))
+                ys[i] = float(np.median(g))                # resolved overlap crossing
+                n_multi += 1
+        c.ys = ys
+        c.n_centre_flat, c.n_centre_overlap = n_flat, n_multi
+    return curves
+
+
+def _group_values(vals, gap: float):
+    """Split a list of y values into groups separated by more than `gap`."""
+    if not vals:
+        return []
+    v = np.sort(np.asarray(vals, float))
+    out, cur = [], [float(v[0])]
+    for a in v[1:]:
+        if a - cur[-1] > gap:
+            out.append(cur)
+            cur = [float(a)]
+        else:
+            cur.append(float(a))
+    out.append(cur)
+    return out
 
 
 def resolve_extension_conflicts(curves, base, fr, frac: float = 0.4):

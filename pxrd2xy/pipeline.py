@@ -111,19 +111,52 @@ def digitize(path: str, outdir: str, cache_dir: str | None = None,
                             if getattr(c, "n_added_left", 0) or getattr(c, "n_added_right", 0))
     rec["n_extension_reverted"] = len(reverted)
 
-    # ---- data conversion, then round-trip verification
+    # ---- read the centre line of each stroke instead of its upper edge, keeping the
+    # variant that actually re-renders closer to the figure. Both variants are drawn with
+    # the same pen width, so this comparison is not affected by the pen-geometry bias that
+    # makes area overlap unusable for judging the extension step.
     Hp = max(fr.height, 1)
     ycal_used = ycal.calibrated
+
+    def evaluate(cs):
+        for c in cs:
+            c.data_x = xcal.to_data(c.xs)
+            c.data_y = ycal.to_data(c.ys)
+        sm, _ = vf.roundtrip_render(cs, fr, xcal, ycal, data_ink.shape)
+        out = []
+        for k, c in enumerate(cs):
+            pix = vf.verify_curve(c, data_ink, labimg, c.mask, fr)
+            rt = vf.roundtrip_metrics(sm[k], c.mask, labimg == c.cluster, data_ink, fr,
+                                      c.linewidth)
+            out.append(vf.combine_metrics(pix, rt))
+        return out
+
+    mode = os.environ.get("PXRD_CENTERLINE", "auto")
+    edge_snap = [(c.xs.copy(), c.ys.copy(), c.coverage) for c in curves]
+    edge_m = evaluate(curves)
+    cv_mod.refine_centerlines(curves, labimg, fr, ink.shape)
+    ctr_m = evaluate(curves)
+    n_ctr = 0
+    metrics = []
+    for i, c in enumerate(curves):
+        keep = (mode == "force" or
+                (mode != "off" and
+                 ctr_m[i]["overlap_iou"] >= edge_m[i]["overlap_iou"] - 0.01))
+        if keep:
+            n_ctr += 1
+            metrics.append(ctr_m[i])
+        else:
+            xs, ys, cov = edge_snap[i]
+            c.xs, c.ys, c.coverage = xs.copy(), ys.copy(), cov
+            metrics.append(edge_m[i])
+    rec["n_centerline"] = n_ctr
     for c in curves:
         c.data_x = xcal.to_data(c.xs)
         c.data_y = ycal.to_data(c.ys)
     synth_masks, synth_all = vf.roundtrip_render(curves, fr, xcal, ycal, data_ink.shape)
 
     for k, c in enumerate(curves):
-        pix = vf.verify_curve(c, data_ink, labimg, c.mask, fr)
-        rt = vf.roundtrip_metrics(synth_masks[k], c.mask, labimg == c.cluster,
-                                  data_ink, fr, c.linewidth)
-        m = vf.combine_metrics(pix, rt)
+        m = metrics[k]
         st = vf.curve_status(m)
         xd, yd = c.data_x, c.data_y
         rec["curves"].append(dict(

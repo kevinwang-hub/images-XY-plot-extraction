@@ -176,6 +176,10 @@ def build_report(recs: list[dict], outdir: str, title: str = "PXRD figure → xy
          f"{n_pass} pass · {n_warn} warn · {len(curves) - n_pass - n_warn} review"),
         ("x-axis calibrated", f"{xcal}/{len(ok)}", "OCR ticks cross-checked vs tick marks"),
         ("legends matched", f"{leg}/{len(curves)}", "colour + geometry agreement"),
+        ("full-width traces", f"{sum(1 for c in curves if c['quality']['coverage'] >= 0.98) / max(len(curves), 1) * 100:.0f}%",
+         "span &ge;98% of the plot width"),
+        ("centre-line applied", f"{sum(r.get('n_centerline', 0) for r in recs)}/{len(curves)}",
+         "pen-width deconvolution accepted"),
         ("ink explained", f"{med(expl) * 100:.0f}%", "figure-level completeness"),
     ]
     tile_html = "".join(
@@ -316,7 +320,9 @@ def _write(outdir, title, tiles, hist_iou, hist_dev, table, cards, nfig, medi) -
 each curve verified by re-plotting it and measuring the overlap with the original ink.
 Pipeline after He <i>et al.</i>, <i>arXiv 2607.23886</i>: PP-OCR axis calibration →
 BIRCH colour decomposition → segment-connectivity graph with a colour-consistency reward →
-legend attribution → round-trip verification. Click any image to cycle the views.</p>
+colour-guided extension to the plot edges → pen-width deconvolution onto the stroke
+<i>centre line</i> → legend attribution → round-trip verification.
+Click any image to cycle the views.</p>
 {f'<div class="tiles">{tiles}</div>'}
 <h2>Distribution of verification scores</h2>
 <div class="grid"><div class="tile"><div class="k">line overlap (round-trip IoU), per curve</div>{hist_iou}</div>

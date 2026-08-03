@@ -32,7 +32,7 @@ or a geometric equivalent, so the whole thing runs offline.
 | Metadata | VLM over caption + paper text | DOI/figure label from the file naming convention |
 | Validation | 100 records checked by human experts | round-trip re-plot overlap per curve + the same <1 % mean / <3 % p99 deviation criterion |
 
-After the reward DP, two more passes run — both added because they fix failures visible in
+After the reward DP, three more passes run — each added because it fixes a failure visible in
 the overlays:
 
 - **Colour-guided extension.** The DP walks the *connectivity* graph, so it stops wherever
@@ -45,6 +45,18 @@ the overlays:
   the extension has nothing left to tell them apart and they all follow the same ink. Added
   stretches that coincide with another curve are therefore rolled back; the original
   DP-assembled parts, which were separated on real evidence, are never touched.
+- **Centre-line correction.** The figure is the data *thickened by a pen*, so the data is the
+  centre of the stroke, not its edge. Two situations pin that centre down: a column whose ink
+  run is at most ~1.6 pen widths tall is locally flat, so the centre of the run is the centre
+  line; and a *row* whose ink block is wide enough to hold k ≥ 2 pen crossings was drawn by k
+  separate passes, whose centres follow from the block width — for a block of 1.5 pen widths
+  the two centres sit at 1/3 and 2/3 of it. Both give real curve points, so the trace is moved
+  onto them. Columns filled by a peak *narrower* than the pen carry no height information at
+  all, and there the peak-preserving estimate is kept rather than replaced by a guess.
+  Deciding this per column is what matters: re-deriving the whole trace from the same
+  candidates (even with a continuity Viterbi) lets it wander between a peak and its baseline
+  in the columns where both are consistent with the ink, which measurably destroys peak
+  heights. Applied to 148 of 209 curves here; a per-curve round-trip check reverts the rest.
 
 Details worth knowing:
 
@@ -95,11 +107,17 @@ spike-dense, so the pass criteria rest on positional accuracy instead.
 
 ### Result on this collection
 
-53 figures → **209 curves, 194 700 data points**, 55 pass / 130 warn / 24 review.
-Median round-trip IoU 0.67, median deviation **0.24 %** of plot height, 83 % of curves within
-1 %, 82 % spanning ≥ 90 % of the plot width. x-axis calibrated for 52/53 figures; legends
-attributed for 189/209 curves; median **99 %** of figure data-ink explained (81 % of figures
-above 95 %).
+53 figures → **209 curves, 195 658 data points**, 67 pass / 126 warn / 16 review.
+Median round-trip IoU **0.72**, median deviation **0.25 %** of plot height, 84 % of curves
+within 1 %, 82 % spanning ≥ 90 % of the plot width. x-axis calibrated for 52/53 figures;
+legends attributed for 189/209 curves; median **99.6 %** of figure data-ink explained.
+
+**Absolute accuracy.** `tests/test_synthetic_accuracy.py` renders a figure from known xy data,
+digitises it and compares against that data — the only check here that is not measured against
+the (already lossy) pixels. Result on three stacked patterns with peaks from broad down to
+sub-pixel: **y RMSE 1.1 %, 1.5 %, 2.0 % of the axis height**, peak positions within
+**0.015–0.032°**, peak heights within **0.5 %** of the axis. The centre-line correction
+accounts for roughly a fifth of that error being removed (1.40/1.93/2.49 % → 1.09/1.52/2.02 %).
 
 Most `warn` labels are the peak-width limitation below rather than a mislocated trace: of the
 flagged curves, 134 are flagged only for `p99 deviation > 3 %`, which on spike-dense figures
