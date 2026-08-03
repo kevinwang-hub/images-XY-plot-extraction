@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# OCR result cache — regenerated automatically on the first run
+.ocrcache/
