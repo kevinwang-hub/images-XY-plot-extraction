@@ -57,6 +57,15 @@ def digitize(path: str, outdir: str, cache_dir: str | None = None,
         return rec
 
     xcal, ycal, extras = ax.calibrate_axes(rgb, ink, fr, ocr_items)
+    # a tick outside the box proves that boundary is not an axis; drop it and re-calibrate
+    fixed_sides = ax.reconcile_frame_with_ticks(fr, xcal, ycal, ink, ocr_items)
+    if fixed_sides:
+        xcal, ycal, extras = ax.calibrate_axes(rgb, ink, fr, ocr_items)
+        rec["frame"] = dict(left=fr.left, right=fr.right, top=fr.top, bottom=fr.bottom,
+                            box=[fr.has_left, fr.has_bottom, fr.has_right, fr.has_top])
+        rec["frame_fixed_sides"] = fixed_sides
+        rec["warnings"].append("frame boundary rejected by tick position: "
+                               + ", ".join(fixed_sides))
     # explicit fallbacks so every downstream stage shares one pixel->value transform:
     # x in original-image pixels, y in plot-box fractions increasing upward
     if not xcal.calibrated:

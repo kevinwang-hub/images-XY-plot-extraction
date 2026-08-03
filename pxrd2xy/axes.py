@@ -355,6 +355,47 @@ def calibrate_axes(rgb: np.ndarray, ink: np.ndarray, fr: Frame,
                             x_label_candidates=xlab, y_label_candidates=ylab)
 
 
+def reconcile_frame_with_ticks(fr: Frame, xcal: AxisCalib, ycal: AxisCalib,
+                               ink: np.ndarray, ocr_items, tol: float = 2.0) -> list[str]:
+    """Discard a frame boundary that a tick proves cannot be an axis.
+
+    A tick of an axis lies *inside* its own axes box - that is a property of a Cartesian
+    plot, not a threshold. So if a tick label sits outside a detected boundary, that
+    boundary is not an axis line. The case that matters in practice: a tall peak clipped at
+    the top and bottom of the plot forms a solid bar of constant width, passes every "is
+    this an axis line" test, and silently truncates the plot area, throwing away all data
+    beyond it.
+
+    The boundary is replaced by the extent of the non-text ink. Returns the sides fixed.
+    """
+    fixed = []
+    textless = ink.copy()
+    for it in (ocr_items or []):
+        x0, y0, x1, y1 = [int(round(v)) for v in it["bbox"]]
+        textless[max(y0 - 1, 0):y1 + 2, max(x0 - 1, 0):x1 + 2] = False
+    if not textless.any():
+        return fixed
+    ys, xs = np.nonzero(textless)
+
+    if xcal.calibrated and xcal.ticks:
+        px = [p for p, _ in xcal.ticks]
+        if fr.left_band is not None and min(px) < fr.left - tol:
+            fr.left, fr.left_band, fr.has_left = int(xs.min()), None, False
+            fixed.append("left")
+        if fr.right_band is not None and max(px) > fr.right + tol:
+            fr.right, fr.right_band, fr.has_right = int(xs.max()), None, False
+            fixed.append("right")
+    if ycal.calibrated and ycal.ticks:
+        py = [p for p, _ in ycal.ticks]
+        if fr.top_band is not None and min(py) < fr.top - tol:
+            fr.top, fr.top_band, fr.has_top = int(ys.min()), None, False
+            fixed.append("top")
+        if fr.bottom_band is not None and max(py) > fr.bottom + tol:
+            fr.bottom, fr.bottom_band, fr.has_bottom = int(ys.max()), None, False
+            fixed.append("bottom")
+    return fixed
+
+
 _GREEK_FIX = [
     (re.compile(r"^2\s*[0Oo0θΘ]\s*", re.I), "2θ "),
     (re.compile(r"2\s*theta", re.I), "2θ"),

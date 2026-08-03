@@ -60,13 +60,18 @@ def _de(c1, c2) -> float:
     return float(np.linalg.norm(a - b))
 
 
-def candidate_entries(ocr_items, fr, rgb, removed_mask, ink, lw_guess=2.0):
+def candidate_entries(ocr_items, fr, rgb, removed_mask, ink, lw_guess=2.0,
+                      min_score: float = 0.60):
     """Text boxes inside the axes box that could be legend entries."""
     out = []
     for it in ocr_items:
         x0, y0, x1, y1 = it["bbox"]
         cx, cy = it["cx"], it["cy"]
         if not (fr.left - 2 <= cx <= fr.right + 2 and fr.top - 2 <= cy <= fr.bottom + 2):
+            continue
+        # a low-confidence box inside the plot is usually the recogniser hallucinating text
+        # out of a noisy curve, not a legend entry
+        if it["score"] < min_score:
             continue
         if parse_number(it["text"]) is not None and len(it["text"].strip()) <= 2:
             continue

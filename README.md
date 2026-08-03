@@ -64,6 +64,18 @@ Details worth knowing:
   *constant thickness*, and actually *bounds the data* (little non-text ink beyond it).
   Without those tests a tall or clipped XRD peak gets mistaken for an axis and truncates the
   plot area.
+- **Tick–frame consistency** is then checked as a hard invariant: *a tick of an axis lies
+  inside its own axes box*. If a tick label sits outside a detected boundary, that boundary
+  cannot be an axis and is replaced by the extent of the non-text ink. This catches the case
+  the shape tests cannot: several strong low-angle peaks, each clipped at the top and bottom
+  of the plot, stack into a solid bar of constant width that looks exactly like a y-axis —
+  and everything to its left, real data, would be silently discarded. It fires on 1 of the 53
+  figures here and changes no aggregate metric, because it is a contradiction test rather
+  than a threshold: the common layout, where the axis sits at the first tick, is within
+  tolerance and untouched.
+- **Legend candidates** must clear a minimum OCR confidence. Below it, a "legend" is usually
+  the recogniser hallucinating words out of a noisy curve (a real legend entry in this set
+  scores 1.00; one hallucination scored 0.52 and was being attributed to a curve).
 - **Anti-aliasing** is handled by clustering only *opaque stroke cores* and then assigning
   halo pixels to the spatially nearest core. Colour clusters that are interleaved inside the
   same stroke, or that are a background-blend of another cluster, are merged — this is what
