@@ -1,0 +1,134 @@
+{
+ "panels": [
+  {
+   "panel": "10.1126_2Fsciadv.aaq1636__Figure_S4_0",
+   "readers": {
+    "pixels (ours)": {
+     "series": 2,
+     "points": 2436,
+     "on_ink": 0.9995894909688013,
+     "dist_px": 0.0
+    },
+    "opus-5 \u00b7 high": {
+     "series": 2,
+     "points": 102,
+     "on_ink": 0.5490196078431373,
+     "dist_px": 2.1171493530273438
+    },
+    "opus-5 \u00b7 max": {
+     "series": 2,
+     "points": 102,
+     "on_ink": 0.45098039215686275,
+     "dist_px": 3.7567977905273438
+    },
+    "fable-5 \u00b7 high": {
+     "series": 2,
+     "points": 95,
+     "on_ink": 0.35789473684210527,
+     "dist_px": 6.4321746826171875
+    }
+   }
+  },
+  {
+   "panel": "10.1126_2Fsciadv.aaq1636__Figure_S5_0",
+   "readers": {
+    "pixels (ours)": {
+     "series": 4,
+     "points": 275,
+     "on_ink": 0.9672727272727273,
+     "dist_px": 0.0
+    },
+    "opus-5 \u00b7 high": {
+     "series": 3,
+     "points": 48,
+     "on_ink": 1.0,
+     "dist_px": 0.0
+    },
+    "opus-5 \u00b7 max": {
+     "series": 3,
+     "points": 48,
+     "on_ink": 1.0,
+     "dist_px": 0.0
+    },
+    "fable-5 \u00b7 high": {
+     "series": 3,
+     "points": 48,
+     "on_ink": 1.0,
+     "dist_px": 0.0
+    }
+   }
+  },
+  {
+   "panel": "10.1006_2Fjssc.2002.9584__Figure_7_0",
+   "readers": {
+    "pixels (ours)": {
+     "series": 1,
+     "points": 935,
+     "on_ink": 0.9989304812834224,
+     "dist_px": 0.0
+    },
+    "opus-5 \u00b7 high": {
+     "series": 1,
+     "points": 121,
+     "on_ink": 0.9504132231404959,
+     "dist_px": 0.0
+    },
+    "opus-5 \u00b7 max": {
+     "series": 1,
+     "points": 81,
+     "on_ink": 0.0,
+     "dist_px": 84.86874389648438
+    },
+    "fable-5 \u00b7 high": {
+     "series": 1,
+     "points": 52,
+     "on_ink": 0.9807692307692307,
+     "dist_px": 0.0
+    }
+   }
+  },
+  {
+   "panel": "10.1039_2FC3CE41975D__Figure_9_0",
+   "readers": {
+    "pixels (ours)": {
+     "series": 3,
+     "points": 2072,
+     "on_ink": 1.0,
+     "dist_px": 0.0
+    },
+    "opus-5 \u00b7 high": {
+     "series": 2,
+     "points": 84,
+     "on_ink": 0.6785714285714286,
+     "dist_px": 0.0
+    },
+    "opus-5 \u00b7 max": {
+     "series": 2,
+     "points": 68,
+     "on_ink": 0.7941176470588235,
+     "dist_px": 0.0
+    },
+    "fable-5 \u00b7 high": {
+     "series": 2,
+     "points": 73,
+     "on_ink": 0.821917808219178,
+     "dist_px": 0.0
+    }
+   }
+  }
+ ],
+ "usage": {
+  "claude-opus-5": {
+   "input": 23191,
+   "output": 41532,
+   "calls": 9,
+   "cost_usd": 1.154255
+  },
+  "claude-fable-5": {
+   "input": 8687,
+   "output": 7261,
+   "calls": 4,
+   "cost_usd": 0.44992
+  }
+ }
+}

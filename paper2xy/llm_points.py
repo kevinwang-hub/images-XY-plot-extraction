@@ -129,7 +129,7 @@ def read_points(rgb: np.ndarray, axis: dict | None = None, caption: str = "",
                                          "data": b64}},
         ]}],
     )
-    usage.record(resp)
+    usage.record(resp, model)
     if resp.stop_reason == "refusal":
         return {"series": []}
     text = next((b.text for b in resp.content if b.type == "text"), "")
