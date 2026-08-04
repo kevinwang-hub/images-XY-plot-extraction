@@ -15,7 +15,7 @@ import json
 import os
 import re
 
-from . import llmcache
+from . import llmcache, usage
 
 MODEL = os.environ.get("PAPER2XY_MODEL", "claude-opus-5")
 
@@ -112,6 +112,7 @@ def resolve(caption: str, context: list, series_labels: list, n_curves: int,
         system=INSTRUCTIONS,
         messages=[{"role": "user", "content": "\n".join(parts)}],
     )
+    usage.record(resp)
     if resp.stop_reason == "refusal":
         return {}
     text = next((b.text for b in resp.content if b.type == "text"), "")

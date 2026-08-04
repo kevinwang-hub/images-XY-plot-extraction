@@ -20,7 +20,7 @@ import re
 import cv2
 import numpy as np
 
-from . import llmcache
+from . import llmcache, usage
 
 MODEL = os.environ.get("PAPER2XY_MODEL", "claude-opus-5")
 
@@ -154,6 +154,7 @@ def classify(items: list[dict], client=None, batch: int = 5,
                            "format": {"type": "json_schema", "schema": SCHEMA}},
             messages=[{"role": "user", "content": content}],
         )
+        usage.record(resp)
         if resp.stop_reason == "refusal":
             continue
         text = next((b.text for b in resp.content if b.type == "text"), "")

@@ -26,7 +26,7 @@ import fitz
 import numpy as np
 
 from . import classify as clf
-from . import llmcache
+from . import llmcache, usage
 from . import context as ctx
 from .ingest import extract
 from .panels import crop, find_panels
@@ -48,7 +48,8 @@ def paper_head(pdf_path: str, chars: int = 3000) -> str:
 
 
 def process_paper(pdf_path: str, outdir: str, client=None, dpi: int = 300,
-                  only: set | None = None, verbose: bool = True) -> dict:
+                  only: set | None = None, verbose: bool = True,
+                  skip_styles: set | None = None) -> dict:
     t0 = time.time()
     figdir = os.path.join(outdir, "figures")
     paneldir = os.path.join(outdir, "panels")
@@ -96,9 +97,28 @@ def process_paper(pdf_path: str, outdir: str, client=None, dpi: int = 300,
     head = paper_head(pdf_path)
     targets = [it for it in items if clf.is_target(cls.get(it["id"], {}), only)]
     rec["n_digitizable"] = len(targets)
+    # Panels of a deferred drawing style are still classified -- the classification is
+    # the cheap part and the record of what is there is worth having -- but not
+    # digitised. They are listed so the run says plainly what it left alone.
+    deferred = []
+    if skip_styles:
+        keep = []
+        for it in targets:
+            st = cls.get(it["id"], {}).get("render_style") or ""
+            (deferred if st in skip_styles else keep).append(it)
+        targets = keep
+    rec["n_deferred"] = len(deferred)
+    rec["deferred"] = [dict(panel_id=it["id"],
+                            render_style=cls.get(it["id"], {}).get("render_style"),
+                            category=cls.get(it["id"], {}).get("category"),
+                            figure=meta[it["id"]]["fig"].label,
+                            panel_image=meta[it["id"]]["path"],
+                            n_curves_seen=cls.get(it["id"], {}).get("n_curves"))
+                       for it in deferred]
     if verbose:
+        extra = f" deferred={len(deferred):2d}" if skip_styles else ""
         print(f"    {paper_id[:34]:36s} figures={len(figures):2d} panels={len(items):2d} "
-              f"digitizable={len(targets):2d}")
+              f"digitizable={len(targets):2d}{extra}")
 
     # ---- digitize + resolve
     for it in targets:
@@ -151,16 +171,23 @@ def process_paper(pdf_path: str, outdir: str, client=None, dpi: int = 300,
     return rec
 
 
-def run(pdf_paths: list, outdir: str, only: set | None = None) -> list:
+def run(pdf_paths: list, outdir: str, only: set | None = None,
+        skip_styles: set | None = None) -> list:
     import anthropic
     client = anthropic.Anthropic()
     os.makedirs(outdir, exist_ok=True)
     llmcache.DIR = llmcache.DIR or os.path.join(outdir, ".llmcache")
     recs = []
     for i, p in enumerate(pdf_paths, 1):
-        print(f"[{i}/{len(pdf_paths)}] {os.path.basename(p)[:52]}")
         try:
-            recs.append(process_paper(p, outdir, client=client, only=only))
+            usage.check()          # between papers, so a run stops on a whole paper
+        except usage.BudgetExceeded as exc:
+            print(f"\nSTOPPED: {exc}. {i - 1} of {len(pdf_paths)} papers done.")
+            break
+        print(f"[{i}/{len(pdf_paths)}] {os.path.basename(p)[:52]}  [${usage.cost():.2f}]")
+        try:
+            recs.append(process_paper(p, outdir, client=client, only=only,
+                                      skip_styles=skip_styles))
         except Exception as exc:
             print(f"    FAILED: {exc!r}")
             recs.append(dict(paper_id=os.path.basename(p), error=repr(exc),
@@ -168,6 +195,7 @@ def run(pdf_paths: list, outdir: str, only: set | None = None) -> list:
                              figures=[], panels=[], warnings=["exception"]))
         with open(os.path.join(outdir, "records.json"), "w") as fh:
             json.dump(recs, fh)
+    print("model usage:", usage.summary())
     export(recs, outdir)
     return recs
 

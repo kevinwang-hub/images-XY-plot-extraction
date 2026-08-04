@@ -134,6 +134,13 @@ EXTRA_CSS = """
 """
 
 
+# A dozen panels can each carry five full-width views; two hundred papers cannot -- the
+# page becomes tens of megabytes and stops being a web page. The views still all exist,
+# just smaller, which is enough to see whether a trace sits on its curve.
+MAX_W = int(os.environ.get("PAPER2XY_REPORT_W", "560"))
+QUALITY = int(os.environ.get("PAPER2XY_REPORT_Q", "68"))
+
+
 def _q(c, k, d=0.0):
     return (c.get("quality") or {}).get(k, d)
 
@@ -172,6 +179,32 @@ def build(recs: list, outdir: str, title: str = "Papers → xy data") -> str:
         f'<span class="tag">{html.escape(str(k))} · {v}</span>'
         for k, v in sorted(cats.items(), key=lambda kv: -kv[1]))
 
+    # Panels classified as scatter and deliberately left undigitised. They are listed,
+    # with what the classifier saw, so the run says plainly what it did not do -- and so
+    # the list can be picked up later without repeating the classification.
+    dfr = [d for r in recs for d in (r.get("deferred") or [])]
+    deferred_html = ""
+    if dfr:
+        by_cat = {}
+        for d in dfr:
+            by_cat[d.get("category", "?")] = by_cat.get(d.get("category", "?"), 0) + 1
+        rows_ = "".join(
+            f'<tr><td>{html.escape(str(d.get("panel_id","")))}</td>'
+            f'<td>{html.escape(str(d.get("figure","")))}</td>'
+            f'<td>{html.escape(str(d.get("category","")))}</td>'
+            f'<td>{html.escape(str(d.get("render_style","")))}</td>'
+            f'<td>{d.get("n_curves_seen","?")}</td></tr>' for d in dfr[:400])
+        deferred_html = (
+            f'<h2>Deferred: {len(dfr)} scatter panels, classified but not digitised</h2>'
+            '<p class="note-line">These were recognised as plots drawn with symbols and '
+            'left alone on purpose. Everything cheap about them is already done — they '
+            'are located, cropped, classified and counted — so the list below is a '
+            'worklist, not a gap. '
+            + " · ".join(f"{k} {v}" for k, v in sorted(by_cat.items(), key=lambda t: -t[1]))
+            + '</p><div class="method"><table><thead><tr><th>panel</th><th>figure</th>'
+            '<th>category</th><th>drawn as</th><th>series seen</th></tr></thead>'
+            f'<tbody>{rows_}</tbody></table></div>')
+
     funnel = "".join(
         f'<div class="step"><div class="v">{v}</div><div class="k">{k}</div>'
         f'<div class="n">{n}</div></div>'
@@ -200,7 +233,8 @@ def build(recs: list, outdir: str, title: str = "Papers → xy data") -> str:
         for p in pans:
             views = []
             if os.path.exists(p.get("panel_image", "")):
-                views.append(("panel", _data_uri(p["panel_image"]), "The cropped panel."))
+                views.append(("panel", _data_uri(p["panel_image"], MAX_W, QUALITY),
+                              "The cropped panel."))
             for key, lab, cap in [
                 ("overlay", "overlay", "Digitised traces over the faded original."),
                 ("diff", "point check", "Green = point on ink, red = off, blue = unclaimed."),
@@ -209,7 +243,7 @@ def build(recs: list, outdir: str, title: str = "Papers → xy data") -> str:
             ]:
                 fp = os.path.join(outdir, "figs", p.get(key) or "")
                 if p.get(key) and os.path.exists(fp):
-                    views.append((lab, _data_uri(fp), cap))
+                    views.append((lab, _data_uri(fp, MAX_W, QUALITY), cap))
             if not views:
                 continue
             pid = html.escape(p["panel_id"] + r["paper_id"])[:60].replace("%", "_")
@@ -276,6 +310,7 @@ pixels are asked where things <i>are</i>. Click any image to cycle the views.</p
 <h2>How many survive each stage</h2>
 <div class="funnel">{funnel}</div>
 {LIMITS_HTML}
+{deferred_html}
 <h2>What the panels turned out to be</h2><p>{cat_html}</p>
 <h2>Verification scores</h2>
 <div class="grid"><div class="tile"><div class="k">line overlap (round-trip IoU)</div>

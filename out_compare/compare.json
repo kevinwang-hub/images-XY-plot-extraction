@@ -4,15 +4,23 @@
   "counts": {
    "symbols": {
     "series": 1,
-    "points": 935
+    "points": 935,
+    "on_ink": 0.9989304812834224
    },
    "colordist": {
     "series": 1,
-    "points": 874
+    "points": 874,
+    "on_ink": 0.9965675057208238
    },
    "template": {
     "series": 1,
-    "points": 982
+    "points": 982,
+    "on_ink": 0.9989816700610998
+   },
+   "llm": {
+    "series": 1,
+    "points": 65,
+    "on_ink": 0.2
    }
   }
  },
@@ -21,15 +29,23 @@
   "counts": {
    "symbols": {
     "series": 3,
-    "points": 1423
+    "points": 1423,
+    "on_ink": 1.0
    },
    "colordist": {
     "series": 1,
-    "points": 2691
+    "points": 2691,
+    "on_ink": 1.0
    },
    "template": {
     "series": 2,
-    "points": 419
+    "points": 419,
+    "on_ink": 1.0
+   },
+   "llm": {
+    "series": 2,
+    "points": 102,
+    "on_ink": 1.0
    }
   }
  },
@@ -38,15 +54,23 @@
   "counts": {
    "symbols": {
     "series": 4,
-    "points": 2370
+    "points": 2370,
+    "on_ink": 1.0
    },
    "colordist": {
     "series": 1,
-    "points": 35
+    "points": 35,
+    "on_ink": 1.0
    },
    "template": {
     "series": 3,
-    "points": 1579
+    "points": 1579,
+    "on_ink": 1.0
+   },
+   "llm": {
+    "series": 2,
+    "points": 57,
+    "on_ink": 0.9824561403508771
    }
   }
  },
@@ -55,15 +79,23 @@
   "counts": {
    "symbols": {
     "series": 3,
-    "points": 2072
+    "points": 2072,
+    "on_ink": 1.0
    },
    "colordist": {
     "series": 1,
-    "points": 290
+    "points": 290,
+    "on_ink": 1.0
    },
    "template": {
     "series": 2,
-    "points": 1374
+    "points": 1374,
+    "on_ink": 1.0
+   },
+   "llm": {
+    "series": 2,
+    "points": 57,
+    "on_ink": 0.49122807017543857
    }
   }
  },
@@ -72,15 +104,23 @@
   "counts": {
    "symbols": {
     "series": 4,
-    "points": 1322
+    "points": 1322,
+    "on_ink": 0.9947049924357034
    },
    "colordist": {
     "series": 1,
-    "points": 183
+    "points": 183,
+    "on_ink": 0.9508196721311475
    },
    "template": {
     "series": 3,
-    "points": 140
+    "points": 140,
+    "on_ink": 0.7428571428571429
+   },
+   "llm": {
+    "series": 2,
+    "points": 71,
+    "on_ink": 0.28169014084507044
    }
   }
  },
@@ -89,15 +129,23 @@
   "counts": {
    "symbols": {
     "series": 3,
-    "points": 1921
+    "points": 1921,
+    "on_ink": 0.9989588755856325
    },
    "colordist": {
     "series": 2,
-    "points": 419
+    "points": 419,
+    "on_ink": 0.9713603818615751
    },
    "template": {
     "series": 3,
-    "points": 113
+    "points": 113,
+    "on_ink": 0.831858407079646
+   },
+   "llm": {
+    "series": 2,
+    "points": 57,
+    "on_ink": 0.9473684210526315
    }
   }
  },
@@ -106,15 +154,23 @@
   "counts": {
    "symbols": {
     "series": 2,
-    "points": 2436
+    "points": 2436,
+    "on_ink": 0.9995894909688013
    },
    "colordist": {
     "series": 1,
-    "points": 1492
+    "points": 1492,
+    "on_ink": 1.0
    },
    "template": {
     "series": 3,
-    "points": 102
+    "points": 102,
+    "on_ink": 0.8627450980392157
+   },
+   "llm": {
+    "series": 2,
+    "points": 94,
+    "on_ink": 0.7021276595744681
    }
   }
  },
@@ -123,15 +179,23 @@
   "counts": {
    "symbols": {
     "series": 4,
-    "points": 2050
+    "points": 2050,
+    "on_ink": 0.995609756097561
    },
    "colordist": {
     "series": 1,
-    "points": 1302
+    "points": 1302,
+    "on_ink": 0.989247311827957
    },
    "template": {
     "series": 4,
-    "points": 239
+    "points": 239,
+    "on_ink": 0.9372384937238494
+   },
+   "llm": {
+    "series": 2,
+    "points": 84,
+    "on_ink": 0.8095238095238095
    }
   }
  },
@@ -140,15 +204,23 @@
   "counts": {
    "symbols": {
     "series": 4,
-    "points": 275
+    "points": 275,
+    "on_ink": 0.9672727272727273
    },
    "colordist": {
     "series": 3,
-    "points": 385
+    "points": 385,
+    "on_ink": 0.9948051948051948
    },
    "template": {
     "series": 3,
-    "points": 92
+    "points": 92,
+    "on_ink": 0.8043478260869565
+   },
+   "llm": {
+    "series": 3,
+    "points": 48,
+    "on_ink": 1.0
    }
   }
  }
