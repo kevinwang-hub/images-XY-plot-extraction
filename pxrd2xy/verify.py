@@ -266,12 +266,20 @@ def curve_status(m: dict) -> str:
     by the overlap of a circle with a triangle no matter how exact the coordinates are --
     that number measures the symbol shape, not the reading. What still has to hold for
     symbols is the part that does mean something: every point on its own ink."""
-    iou_floor = 0.0 if m.get("style") == "markers" else 0.45
-    if (m["point_on_ink"] >= 0.97 and m["colour_match"] >= 0.95 and m["on_ink"] >= 0.65
+    # For a symbol series the round trip re-plots every point as a disc, so both
+    # area-overlap and lands-on-ink measure the shape of the symbol rather than the
+    # accuracy of the reading: the centre of an *open* circle is background, and a
+    # perfectly read ring scores as landing off ink. What still has to hold, and does
+    # all the work for symbols, is point_on_ink -- every digitised point sitting on ink
+    # of its own colour, which is exact and shape-independent.
+    markers = m.get("style") == "markers"
+    iou_floor = 0.0 if markers else 0.45
+    ink_floor = 0.35 if markers else 0.65
+    if (m["point_on_ink"] >= 0.97 and m["colour_match"] >= 0.95 and m["on_ink"] >= ink_floor
             and m["mean_dev_pct"] <= 1.0 and m["p99_dev_pct"] <= 3.0
             and m["coverage"] >= 0.85 and m["overlap_iou"] >= iou_floor):
         return "pass"
-    if (m["point_on_ink"] >= 0.88 and m["on_ink"] >= 0.50
+    if (m["point_on_ink"] >= 0.88 and m["on_ink"] >= (0.25 if markers else 0.50)
             and m["mean_dev_pct"] <= 2.5 and m["coverage"] >= 0.60):
         return "warn"
     return "fail"
@@ -292,7 +300,7 @@ def status_reason(m: dict) -> str:
     """Which pass gate(s) a curve missed, in plain words."""
     bad = []
     for key, thr, op, why in GATES:
-        if key == "overlap_iou" and m.get("style") == "markers":
+        if key in ("overlap_iou", "on_ink") and m.get("style") == "markers":
             continue
         v = m.get(key)
         if v is None:
@@ -302,10 +310,26 @@ def status_reason(m: dict) -> str:
     return "; ".join(bad) if bad else "all checks passed"
 
 
+def render_points(shape, xs, ys, size: float) -> np.ndarray:
+    """A scatter re-rasterised as discs at its data points, and nowhere else."""
+    m = np.zeros(shape, np.uint8)
+    r = max(1, int(round(size * 0.5)))
+    for x, y in zip(np.asarray(xs), np.asarray(ys)):
+        cv2.circle(m, (int(round(x)), int(round(y))), r, 1, -1)
+    return m.astype(bool)
+
+
+def _render_curve(c, shape, grow: float = 0.0) -> np.ndarray:
+    if getattr(c, "style", "line") == "markers":
+        return render_points(shape, c.xs, c.ys,
+                             getattr(c, "marker_px", c.linewidth) + grow)
+    return render_trace_columns(shape, c.xs, c.ys, c.linewidth + grow, "full")
+
+
 def _union_loose(curves, shape, grow: float = 2.0) -> np.ndarray:
     acc = np.zeros(shape, bool)
     for c in curves:
-        acc |= render_trace_columns(shape, c.xs, c.ys, c.linewidth + grow, "full")
+        acc |= _render_curve(c, shape, grow)
     return acc
 
 
@@ -376,6 +400,13 @@ def overlay_image(rgb, curves, fr, xcal, ycal, show_ticks: bool = True) -> np.nd
     for c in curves:
         pts = np.stack([c.xs, np.round(c.ys)], 1).astype(np.int32)
         col = tuple(int(v) for v in c.rgb)
+        if getattr(c, "style", "line") == "markers":
+            # A scatter is drawn as a scatter. Joining its points with a line would show
+            # values between the measurements, which is exactly what was not read.
+            r = max(2, int(round(getattr(c, "marker_px", 4.0) * 0.45)))
+            for x, y in pts:
+                cv2.circle(out, (int(x), int(y)), r, col, -1, cv2.LINE_AA)
+            continue
         cv2.polylines(out, [pts], False, col, max(1, int(round(c.linewidth * 0.5))),
                       cv2.LINE_AA)
     if show_ticks and xcal.calibrated:

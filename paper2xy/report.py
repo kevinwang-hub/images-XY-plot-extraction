@@ -36,16 +36,20 @@ METHOD_HTML = """
 <td><b>Pixels.</b> Unchanged from the verified engine: OCR-calibrated axes, colour decomposition, segment graph, pen-width deconvolution, round-trip verification. Nothing in the numeric path depends on a model reading a coordinate.</td></tr>
 
 <tr><td><b>Lines or points?</b></td>
-<td>Component-size statistics; isolated-symbol fractions; <b>ask the classifier</b></td>
-<td><b>Ask, then dispatch.</b> A continuous stroke and a row of symbols need different algorithms, and no pixel statistic separates them reliably: symbols packed tightly enough look like a stroke, and a stroke chopped by overlapping curves looks like symbols. But it is obvious at a glance — so the classifier, which is already looking at the panel, answers one more question (<code>lines</code>, <code>markers</code>, <code>markers joined by lines</code>, <code>mixed</code>) and that picks the tracer. It is still only ever asked what something <i>is</i>.</td></tr>
+<td>Column coverage; component shape; ink share; symbol uniformity; <b>ask the classifier</b></td>
+<td><b>Measured first, and it does not separate.</b> Across this corpus every statistic that ought to tell a scatter from a stroke overlaps between them — column coverage 0.45–1.00 for points against 0.17–1.00 for lines, median thickness 4–32&nbsp;px against 4–14, symbol ink share 0.35–0.79 against 0.13–0.98. The reason is structural: a stroke crossed by other curves is cut into many small equant fragments — one line panel here yields 54 of them holding 98% of its ink — which is indistinguishable, component by component, from a row of symbols. So the question goes to the classifier, which is looking at the panel anyway and answered all six test panels correctly.</td></tr>
 
-<tr><td><b>Tracing points</b><br>(isotherms, magnetic data)</td>
-<td>Stroke tracing; marker centroids; per-column average; <b>continuity chaining</b></td>
-<td><b>Chain the points.</b> Stroke tracing shatters a symbol series — one magnetic panel came back as 11 pieces, 7 identical. Averaging each column's ink is worse in a subtler way: in a column holding both the curve <i>and</i> a legend key, an inset, or a clipped-in neighbour, it averages two unrelated things and spikes. Instead every symbol becomes a point, and the series is the most continuous path through them: each point taken is worth one, each step costs the vertical distance travelled, and columns may be skipped for free. A detour to a legend key pays that distance twice to gain one point, so it never pays; a genuinely steep curve pays it once and has no alternative, so it is still traced.</td></tr>
+<tr><td><b>A plot of points</b></td>
+<td>Trace a path through them; <b>one point per symbol</b></td>
+<td><b>One symbol, one value, at its centre — and nothing in between.</b> A scatter states its values at the pressures that were measured and says nothing between them, so no path is fitted through the points and no line is drawn joining them, in the data or in any of the verification views. This is also what finally settles hysteresis: a loop is not a function and any single path through it has to cross from one arm to the other, but as points there is nothing to cross — the loop is just its measurements.</td></tr>
 
-<tr><td><b>Tracing lines</b></td>
-<td>Segment graph; point tracer; <b>both, by outcome</b></td>
-<td><b>The graph leads.</b> It is the specialist where curves cross and have to be told apart by what connects to what. On a panel classified as lines the column-averaging fallback is switched off entirely — it exists only to rescue a symbol series, and on a line panel it manufactures one out of whatever shares each column. Where the style is genuinely ambiguous, both tracers run and the one covering more of the axis is kept.</td></tr>
+<tr><td><b>Symbols that have fused</b></td>
+<td>Treat the run as a line; <b>cut it back into points</b></td>
+<td><b>Points.</b> Where symbols are dense enough to touch, a whole series can arrive as a single component — that stretch is not a line, it is symbols overlapping, and its data points are the column centres under the run. The symbol size is then the run's own thickness, which is what the pen drew.</td></tr>
+
+<tr><td><b>A guide line through a scatter</b></td>
+<td>Digitise it as a series; <b>drop it</b></td>
+<td><b>Decoration, not data.</b> Papers join measured points with a line so the eye can follow them; it states no value the points do not already state and draws values between measurements that were never made. Two things identify it, and both are comparisons <i>within</i> one panel, which is what makes them safe: it is markedly thinner than the symbols it serves, and it runs along them. Neither test alone would do — a thin curve going its own way is data, and a thick series lying near another is two real series that overlap.</td></tr>
 
 <tr><td><b>Not-a-series colours</b></td>
 <td>Trust the clustering; <b>test the best path</b></td>

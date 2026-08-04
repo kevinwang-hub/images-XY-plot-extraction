@@ -539,6 +539,195 @@ def _linewidth(segments, path, labimg, cluster) -> float:
     return float(max(1.0, round(lw)))
 
 
+# ------------------------------------------------- what a colour is drawn as
+
+def cluster_style(mask, labimg, cluster: int, fr) -> tuple[str, dict]:
+    """How one colour is drawn: "points", "line", "mixed", or "unknown".
+
+    Tried first, and it does not work well enough to be trusted on its own. Measured
+    across this corpus, every statistic that ought to separate a scatter from a stroke
+    overlaps between them:
+
+        column coverage   points 0.45-1.00   lines 0.17-1.00
+        median thickness  points 4-32 px     lines 4-14 px
+        symbol ink share  points 0.35-0.79   lines 0.13-0.98
+
+    The reason is structural: a stroke crossed by other curves is cut into many small
+    equant fragments -- one line panel here yields 54 of them holding 98% of its ink --
+    which is indistinguishable, component by component, from a row of symbols. So this
+    is used only for the sub-question inside a scatter panel, where a *relative*
+    comparison between the colours in one panel is reliable even though the absolute
+    numbers are not: the guide line is the thin one and the data are the thick ones.
+    Whether the panel is a scatter at all is asked of the classifier instead.
+    """
+    own = (labimg == cluster) & mask
+    n, lab, stats, cent = cv2.connectedComponentsWithStats(own.astype(np.uint8), 8)
+    if n <= 1:
+        return "unknown", {}
+    W, H = max(fr.width, 1), max(fr.height, 1)
+    areas = stats[1:, cv2.CC_STAT_AREA].astype(float)
+    ws = stats[1:, cv2.CC_STAT_WIDTH].astype(float)
+    hs = stats[1:, cv2.CC_STAT_HEIGHT].astype(float)
+    total = float(areas.sum())
+    if total < 40:
+        return "unknown", {}
+    long_side = np.maximum(ws, hs)
+    short_side = np.maximum(np.minimum(ws, hs), 1.0)
+    aspect = long_side / short_side
+    symbol = ((ws <= 0.06 * W) & (hs <= 0.06 * H) & (areas >= 4) & (aspect <= 2.5))
+    stroke = (long_side >= 0.12 * max(W, H)) & (aspect >= 3.0)
+    sym_ink = float(areas[symbol].sum()) / total
+    stroke_ink = float(areas[stroke].sum()) / total
+    n_sym = int(symbol.sum())
+    # a symbol population is drawn with one pen: its members are all about one size
+    uniform = 0.0
+    if n_sym >= 4:
+        a = areas[symbol]
+        med = float(np.median(a))
+        uniform = float(np.mean((a >= 0.4 * med) & (a <= 2.5 * med)))
+    info = dict(n_components=int(len(areas)), n_symbols=n_sym, symbol_ink=sym_ink,
+                stroke_ink=stroke_ink, uniform=uniform)
+    if n_sym >= 6 and sym_ink >= 0.55 and stroke_ink <= 0.25 and uniform >= 0.6:
+        return "points", info
+    if n_sym >= 6 and sym_ink >= 0.15 and stroke_ink >= 0.25 and uniform >= 0.6:
+        return "mixed", info
+    if stroke_ink >= 0.5 or (len(areas) <= 3 and sym_ink < 0.5):
+        return "line", info
+    return "unknown", info
+
+
+def point_series(mask, labimg, cluster: int, fr, style: str):
+    """The data points of a colour drawn as symbols.
+
+    One symbol, one data point, at its centre -- which is what the symbol means. No path
+    is fitted through them and no value is interpolated between them: a scatter plot
+    states its values at the pressures or temperatures that were measured and says
+    nothing in between, so neither does this.
+
+    Where symbols have run together the fused run is cut back into one point per column,
+    because that is where the centres of the symbols under it lie.
+
+    Returns (series, symbol_size, mask) where series is a list of (xs, ys, fill), fill
+    being 1 for solid symbols, 0 for open ones and -1 where it could not be told.
+    """
+    own = (labimg == cluster) & mask
+    n, lab, stats, cent = cv2.connectedComponentsWithStats(own.astype(np.uint8), 8)
+    if n <= 1:
+        return None
+    W, H = max(fr.width, 1), max(fr.height, 1)
+    areas = stats[1:, cv2.CC_STAT_AREA].astype(float)
+    ws = stats[1:, cv2.CC_STAT_WIDTH].astype(float)
+    hs = stats[1:, cv2.CC_STAT_HEIGHT].astype(float)
+    aspect = np.maximum(ws, hs) / np.maximum(np.minimum(ws, hs), 1.0)
+    symbol = (ws <= 0.06 * W) & (hs <= 0.06 * H) & (areas >= 4) & (aspect <= 2.5)
+    if symbol.sum() >= 4:
+        sym = max(float(np.median(np.sqrt(areas[symbol]))), 2.0)
+    else:
+        # Symbols packed tightly enough touch, and a whole series can arrive as a single
+        # component. There is nothing to take a centroid of, but the centres are still
+        # there: one per column, under the run. The symbol size is then the run's own
+        # thickness, which is what the pen drew.
+        th = own.sum(axis=0).astype(float)
+        th = th[th > 0]
+        if th.size < 12:
+            return None
+        sym = max(float(np.median(th)), 2.0)
+    xs, ys, fill = [], [], []
+    for i in range(len(areas)):
+        w, h = ws[i], hs[i]
+        if h <= 2 and w >= 4 * sym:
+            continue                                   # a legend rule, not a symbol
+        if symbol[i] or (w <= 2.5 * sym and h <= 2.5 * sym):
+            xs.append(float(cent[i + 1][0]))
+            ys.append(float(cent[i + 1][1]))
+            fill.append(_symbol_filled(lab, stats, i + 1))
+            continue
+        if style != "mixed":
+            continue                                   # stray ink, not this series
+        x0 = int(stats[i + 1, cv2.CC_STAT_LEFT])
+        y0 = int(stats[i + 1, cv2.CC_STAT_TOP])
+        sub = lab[y0:y0 + int(h), x0:x0 + int(w)] == (i + 1)
+        for c in range(sub.shape[1]):
+            rows = np.flatnonzero(sub[:, c])
+            if rows.size == 0:
+                continue
+            for a, b in group_consecutive(rows, gap=2):
+                if (b - a + 1) > 0.5 * H:
+                    continue
+                xs.append(float(x0 + c))
+                ys.append(float(y0 + (a + b) / 2.0))
+                fill.append(-1)
+    if len(xs) < 6:
+        return None
+    xs = np.asarray(xs, float)
+    ys = np.asarray(ys, float)
+    fill = np.asarray(fill, np.int8)
+    o = np.argsort(xs)
+    xs, ys, fill = xs[o], ys[o], fill[o]
+    if (xs.max() - xs.min()) < 0.15 * W:
+        return None
+    # Solid and open symbols of one colour are two series -- adsorption and desorption,
+    # cooling and warming. Splitting on the symbol is exact where chaining could only
+    # guess, and it is how the figure's own legend distinguishes them.
+    solid, open_ = fill == 1, fill == 0
+    known = int(solid.sum()) + int(open_.sum())
+    out = []
+    if known >= 8 and solid.sum() >= 0.15 * known and open_.sum() >= 0.15 * known:
+        for sel in (solid, open_):
+            if sel.sum() >= 4 and (xs[sel].max() - xs[sel].min()) >= 0.15 * W:
+                out.append((xs[sel], ys[sel], 1 if sel is solid else 0))
+        unk = fill == -1
+        if unk.any() and out:
+            k = int(np.argmax([len(o_[0]) for o_ in out]))
+            merged = np.argsort(np.concatenate([out[k][0], xs[unk]]))
+            allx = np.concatenate([out[k][0], xs[unk]])[merged]
+            ally = np.concatenate([out[k][1], ys[unk]])[merged]
+            out[k] = (allx, ally, out[k][2])
+    if not out:
+        out = [(xs, ys, -1)]
+    return out, sym, own
+
+
+def connector_lines(curves, fr) -> list[int]:
+    """Indices of series that are a guide line threading a scatter, not data.
+
+    Papers routinely join measured points with a line in another colour so the eye can
+    follow them. That line states no value the points do not already state, and it draws
+    values between measurements that were never made -- so the points are the data and
+    the line is decoration.
+
+    Two things identify it, and both are comparisons *within* one panel, which is what
+    makes them safe: the guide is markedly thinner than the symbols it serves, and it
+    runs along them. Neither absolute thickness nor closeness alone would do; a thin
+    curve that goes its own way is data, and a thick series lying near another is two
+    real series that happen to overlap.
+    """
+    if len(curves) < 2:
+        return []
+    thick = max((getattr(c, "marker_px", 0.0) or c.linewidth) for c in curves)
+    if thick <= 0:
+        return []
+    drop = []
+    for i, c in enumerate(curves):
+        w = getattr(c, "marker_px", 0.0) or c.linewidth
+        if w > 0.6 * thick or len(c.xs) < 12:
+            continue
+        for j, p in enumerate(curves):
+            if j == i or tuple(p.rgb) == tuple(c.rgb) or len(p.xs) < 6:
+                continue
+            pw = getattr(p, "marker_px", 0.0) or p.linewidth
+            if pw <= 0.6 * thick:
+                continue
+            o = np.argsort(p.xs)
+            near = np.interp(c.xs, p.xs[o], p.ys[o], left=np.nan, right=np.nan)
+            ok = np.abs(near - c.ys) <= max(pw, 0.02 * max(fr.height, 1))
+            if np.isfinite(near).sum() >= 0.5 * len(c.xs) and \
+                    float(np.nanmean(ok.astype(float))) >= 0.75:
+                drop.append(i)
+                break
+    return drop
+
+
 def marker_cloud(mask, labimg, cluster: int, fr, require_population: bool = True):
     """Every symbol of one colour, reduced to a point.
 
@@ -1017,32 +1206,43 @@ def extract_curves(rgb, mask, fr, labimg, clusters, max_per_cluster: int = 8,
     out: list[Curve] = []
 
     for c in clusters:
-        # Two tracers, and the classifier has already said which case this is.
+        # Lines, or points? The four cases in practice reduce to two treatments:
         #
-        # The point tracer is the general one: it reduces a series to points -- one per
-        # symbol, or one per column where ink is continuous -- and chains them by
-        # continuity, so it handles strokes as well as symbols. The connectivity graph is
-        # the specialist: it is better where curves cross and have to be told apart by
-        # what connects to what, and it is useless where there is nothing to connect.
+        #   1 pure lines                     -> the connectivity graph
+        #   2 pure points                    -> one data point per symbol centre
+        #   3 points with a guide line in    -> the guide is decoration; the points are
+        #     another colour                    the data, so case 2 after dropping it
+        #   4 one colour, part symbols part  -> the fused stretch is symbols touching,
+        #     fused run                         not a line; still case 2
         #
-        #   markers -> point tracer alone. There are no strokes, and letting the graph
-        #              try anyway consumes segments other colours then cannot use.
-        #   lines / joined / mixed -> both run and the one covering more axis is kept.
-        #
-        # What the hint settles in every case is the *population* question -- whether a
-        # scatter of small components is a symbol series or crumbs along a stroke -- and
-        # how the series is labelled and re-plotted for verification.
-        ch = chain_traces(mask, labimg, c.idx, fr,
-                          require_population=style_hint != "markers")
-        if ch is not None and style_hint == "markers":
-            _emit_chains(out, ch, c, Wp, "markers")
-            continue
-        # The column tracer is the last resort for a symbol series the point tracer
-        # could not read. On a panel classified as lines there is no symbol series for it
-        # to rescue, and what it produces instead is the average of whatever shares each
-        # column -- exactly the failure the point tracer was written to replace.
-        sc_cols = (column_trace(mask, labimg, c.idx, fr)
-                   if ch is None and style_hint != "lines" else None)
+        # so the only question is which of the two, and it is asked of the classifier
+        # because the pixels cannot answer it (see cluster_style for the measurements).
+        if style_hint == "lines":
+            cstyle = "line"
+        elif style_hint in ("markers", "markers_joined_by_lines"):
+            cstyle = "points"
+        else:
+            # "mixed" means the series in this panel are not all drawn the same way, so
+            # there is no panel-level answer to apply and it falls to the geometry --
+            # which is weak, but here it is choosing between two treatments that are
+            # both defensible rather than deciding whether a series exists.
+            cstyle, _ = cluster_style(mask, labimg, c.idx, fr)
+            cstyle = "line" if cstyle in ("line", "unknown") else "points"
+
+        if cstyle == "points":
+            ps = point_series(mask, labimg, c.idx, fr, "mixed")
+            if ps is not None:
+                series, size, pmask = ps
+                for px_, py_, _f in series:
+                    out.append(Curve(xs=px_, ys=py_, cluster=c.idx, rgb=c.rgb,
+                                     linewidth=max(size, 2.0), reward=float(len(px_)),
+                                     coverage=(px_.max() - px_.min()) / Wp, seg_ids=[],
+                                     mask=pmask, style="markers", chained=True,
+                                     marker_px=size))
+                continue
+
+        ch = None
+        sc_cols = None
         cl_total = c.n_pixels
         lw = 2.0
         before = len(out)
@@ -1088,31 +1288,11 @@ def extract_curves(rgb, mask, fr, labimg, clusters, max_per_cluster: int = 8,
                 _emit_chains(out, ch, c, Wp, "markers" if (
                     style_hint not in ("lines", "markers_joined_by_lines")
                     and iso >= 0.20) else "line")
-        if sc_cols is not None:
-            best = max((o.coverage for o in out[before:]), default=0.0)
-            cx, cy, csize, cmask = sc_cols
-            ccov = len(cx) / Wp
-            br = branch_traces(mask, labimg, c.idx, fr)
-            # Branches span the same columns as the single trace, so they can never win
-            # on coverage — but where they exist they carry both curves instead of one,
-            # which is strictly more of the figure's data.
-            # Prefer branches only where stroke tracing already struggled: a stack of
-            # three same-coloured curves is better served by the DP's repeated passes,
-            # while a hysteresis loop defeats them entirely.
-            if br is not None and best < 0.6:
-                (ux, uy), (lx, ly), bsize, bmask = br
-                del out[before:]
-                for xs_, ys_ in ((ux, uy), (lx, ly)):
-                    out.append(Curve(xs=xs_, ys=ys_, cluster=c.idx, rgb=c.rgb,
-                                     linewidth=max(bsize, 2.0), reward=float(len(xs_)),
-                                     coverage=len(xs_) / Wp, seg_ids=[], mask=bmask,
-                                     style="markers", marker_px=bsize))
-            elif ccov > max(best, 0.5) or (best < 0.5 and ccov > best):
-                del out[before:]
-                out.append(Curve(xs=cx, ys=cy, cluster=c.idx, rgb=c.rgb,
-                                 linewidth=max(csize, 2.0), reward=float(len(cx)),
-                                 coverage=ccov, seg_ids=[], mask=cmask,
-                                 style="markers", marker_px=csize))
+    # A guide line drawn through a scatter is decoration, not data: it interpolates
+    # between measurements that were never made. The points already say everything it
+    # says, so it goes.
+    for i in sorted(connector_lines(out, fr), reverse=True):
+        del out[i]
     _relabel(out, rgb, labimg, len(clusters), mask, bg_color)
     out = _dedupe(out, fr, bg_color)
     # Span, not filled-column count, for anything that came out of the point tracer: a
