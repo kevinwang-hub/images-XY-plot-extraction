@@ -1426,7 +1426,17 @@ def extract_curves(rgb, mask, fr, labimg, clusters, max_per_cluster: int = 8,
     # about the whole panel rather than about one colour -- two series can share a
     # colour and be told apart by their symbol, which no per-colour loop could do.
     if style_hint in ("markers", "markers_joined_by_lines"):
-        ss = symbol_series(rgb, mask, fr, bg_color)
+        # PXRD_SCATTER selects the reader, so the three can be compared on the same
+        # panels: "symbols" (ours), "colordist" and "template" (adapted from
+        # WebPlotDigitizer -- see scatter_alt).
+        which = os.environ.get("PXRD_SCATTER", "symbols")
+        if which == "symbols":
+            ss = symbol_series(rgb, mask, fr, bg_color)
+        else:
+            from . import scatter_alt
+            fn = (scatter_alt.points_colordist if which == "colordist"
+                  else scatter_alt.points_template)
+            ss = [(a, b, c, d, -1, m) for a, b, c, d, m in fn(rgb, mask, fr, bg_color)]
         if ss:
             out = []
             for xs_, ys_, col, size, _f, smask in ss:

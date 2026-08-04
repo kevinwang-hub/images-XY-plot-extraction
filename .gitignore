@@ -7,3 +7,6 @@ __pycache__/
 out_papers/figures/
 out_papers/figs/
 .llmcache/
+out_compare/symbols/
+out_compare/colordist/
+out_compare/template/

@@ -1,0 +1,155 @@
+[
+ {
+  "panel": "10.1006_2Fjssc.2002.9584__Figure_7_0",
+  "counts": {
+   "symbols": {
+    "series": 1,
+    "points": 935
+   },
+   "colordist": {
+    "series": 1,
+    "points": 874
+   },
+   "template": {
+    "series": 1,
+    "points": 982
+   }
+  }
+ },
+ {
+  "panel": "10.1039_2FC3CE41975D__Figure_10_0",
+  "counts": {
+   "symbols": {
+    "series": 3,
+    "points": 1423
+   },
+   "colordist": {
+    "series": 1,
+    "points": 2691
+   },
+   "template": {
+    "series": 2,
+    "points": 419
+   }
+  }
+ },
+ {
+  "panel": "10.1039_2FC3CE41975D__Figure_11_0",
+  "counts": {
+   "symbols": {
+    "series": 4,
+    "points": 2370
+   },
+   "colordist": {
+    "series": 1,
+    "points": 35
+   },
+   "template": {
+    "series": 3,
+    "points": 1579
+   }
+  }
+ },
+ {
+  "panel": "10.1039_2FC3CE41975D__Figure_9_0",
+  "counts": {
+   "symbols": {
+    "series": 3,
+    "points": 2072
+   },
+   "colordist": {
+    "series": 1,
+    "points": 290
+   },
+   "template": {
+    "series": 2,
+    "points": 1374
+   }
+  }
+ },
+ {
+  "panel": "10.1126_2Fsciadv.aaq1636__Figure_S3_0",
+  "counts": {
+   "symbols": {
+    "series": 4,
+    "points": 1322
+   },
+   "colordist": {
+    "series": 1,
+    "points": 183
+   },
+   "template": {
+    "series": 3,
+    "points": 140
+   }
+  }
+ },
+ {
+  "panel": "10.1126_2Fsciadv.aaq1636__Figure_S3_1",
+  "counts": {
+   "symbols": {
+    "series": 3,
+    "points": 1921
+   },
+   "colordist": {
+    "series": 2,
+    "points": 419
+   },
+   "template": {
+    "series": 3,
+    "points": 113
+   }
+  }
+ },
+ {
+  "panel": "10.1126_2Fsciadv.aaq1636__Figure_S4_0",
+  "counts": {
+   "symbols": {
+    "series": 2,
+    "points": 2436
+   },
+   "colordist": {
+    "series": 1,
+    "points": 1492
+   },
+   "template": {
+    "series": 3,
+    "points": 102
+   }
+  }
+ },
+ {
+  "panel": "10.1126_2Fsciadv.aaq1636__Figure_S4_1",
+  "counts": {
+   "symbols": {
+    "series": 4,
+    "points": 2050
+   },
+   "colordist": {
+    "series": 1,
+    "points": 1302
+   },
+   "template": {
+    "series": 4,
+    "points": 239
+   }
+  }
+ },
+ {
+  "panel": "10.1126_2Fsciadv.aaq1636__Figure_S5_0",
+  "counts": {
+   "symbols": {
+    "series": 4,
+    "points": 275
+   },
+   "colordist": {
+    "series": 3,
+    "points": 385
+   },
+   "template": {
+    "series": 3,
+    "points": 92
+   }
+  }
+ }
+]
