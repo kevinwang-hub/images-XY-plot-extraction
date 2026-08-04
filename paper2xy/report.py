@@ -41,11 +41,15 @@ METHOD_HTML = """
 
 <tr><td><b>A plot of points</b></td>
 <td>Trace a path through them; <b>one point per symbol</b></td>
-<td><b>One symbol, one value, at its centre — and nothing in between.</b> A scatter states its values at the pressures that were measured and says nothing between them, so no path is fitted through the points and no line is drawn joining them, in the data or in any of the verification views. This is also what finally settles hysteresis: a loop is not a function and any single path through it has to cross from one arm to the other, but as points there is nothing to cross — the loop is just its measurements.</td></tr>
+<td><b>One symbol, one value, at its centre — and nothing in between.</b> A scatter states its values at the pressures that were measured and says nothing between them, so no path is fitted through the points and no line is drawn joining them, in the data or in any verification view. This is also what settles hysteresis: a loop is not a function and any single path through it has to cross from one arm to the other, but as points there is nothing to cross.</td></tr>
 
-<tr><td><b>Symbols that have fused</b></td>
-<td>Treat the run as a line; <b>cut it back into points</b></td>
-<td><b>Points.</b> Where symbols are dense enough to touch, a whole series can arrive as a single component — that stretch is not a line, it is symbols overlapping, and its data points are the column centres under the run. The symbol size is then the run's own thickness, which is what the pen drew.</td></tr>
+<tr><td><b>Which points are one series</b></td>
+<td>Colour-cluster the pixels; <b>group the symbols</b></td>
+<td><b>Group the symbols, not the pixels.</b> Pixels are the wrong unit for a scatter: every symbol carries a halo of blended edge pixels, so one series arrives as a saturated cluster plus a pale one — which is how a magnetic panel lost every point above 100 K to a grey "halo" cluster. A symbol has one colour, averaged over its whole body and therefore stable, one size and one fill, and a series is a group agreeing on all three. Shades that differ only along the line joining them to the background are the same pen drawn over itself and are merged; that alone turned one blue isotherm back from six series into two. Solid and open symbols of one colour stay separate — that is how the figure's own legend distinguishes adsorption from desorption.</td></tr>
+
+<tr><td><b>Data deleted before it was read</b></td>
+<td>—</td>
+<td><b>Three filters were eating markers.</b> The glyph filter, because a marker and a stray character are both small compact blobs — a glyph is one of a few and a marker one of many identical, so the modal size band is now exempt. The OCR filter, because a row of evenly spaced markers reads as a line of text: on one panel it was recognised as a CJK glyph and the series' whole high-temperature tail was deleted, so a text box covering three or more identical markers is now treated as a misread. And the size band itself, anchored to a median that anti-aliasing fragments drag down, which discarded symbols for being too <i>large</i>.</td></tr>
 
 <tr><td><b>A guide line through a scatter</b></td>
 <td>Digitise it as a series; <b>drop it</b></td>
@@ -80,10 +84,8 @@ LIMITS_HTML = """
 white gutter, the crop can carry a slice of its neighbour. The digitiser then reads real ink
 that belongs to the other panel, and the curve is marked <b>fail</b> on coverage rather than
 silently exported as good — which is the behaviour you want, but the crop is still wrong.</td></tr>
-<tr><td><b>Dense fused symbols</b></td><td>Where a series is drawn as large circles that
-overlap their neighbours, individual symbols cannot be recovered and neither branch split
-applies — the arms of such a loop are still traced as one curve that crosses between them.
-Flagged <b>fail</b>, not exported as clean.</td></tr>
+<tr><td><b>Very pale series</b></td><td>A series drawn close enough to the
+background that its symbols sit near the ink threshold is still recovered only in part.</td></tr>
 <tr><td><b>Legend text</b></td><td>OCR reads legend strings off the panel, and inside a busy
 plot it sometimes returns a fragment (<code>200</code>) or two words fused
 (<code>Openintermediate</code>). The context stage recovers the real identity from the paper

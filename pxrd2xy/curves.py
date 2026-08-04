@@ -74,6 +74,51 @@ def remove_text_and_legend(mask: np.ndarray, ocr_items, fr, lw_guess: float = 2.
     total = mask.sum()
     boxes = [it["bbox"] for it in ocr_items]
     removed = np.zeros_like(mask)
+
+    # A data marker and a stray glyph are both small compact blobs, and the glyph test
+    # below cannot tell them apart one at a time -- which cost one isotherm 31 of its
+    # points, more than half its ink. What separates them is the company they keep: a
+    # glyph is one of a few, a marker is one of many identical. So the modal size of the
+    # equant blobs is found first, and blobs of that size are exempt from the glyph test.
+    # They can still be dropped for sitting inside a text box or beside a legend entry,
+    # which is what a legend key does.
+    ar = stats[1:, cv2.CC_STAT_AREA].astype(float)
+    bw = stats[1:, cv2.CC_STAT_WIDTH].astype(float)
+    bh = stats[1:, cv2.CC_STAT_HEIGHT].astype(float)
+    equant = ((np.maximum(bw, bh) / np.maximum(np.minimum(bw, bh), 1.0) <= 2.2)
+              & (ar >= 8) & (bw <= 0.10 * Wp) & (bh <= 0.09 * Hp))
+    marker_band = None
+    if equant.sum() >= 8:
+        med = float(np.median(ar[equant]))
+        band = equant & (ar >= 0.4 * med) & (ar <= 2.5 * med)
+        if band.sum() >= 6:
+            marker_band = (0.4 * med, 2.5 * med)
+
+    def _in_band(w, h, area):
+        return bool(marker_band and marker_band[0] <= area <= marker_band[1]
+                    and max(w, h) / max(min(w, h), 1) <= 2.2)
+
+    # A row of evenly spaced identical markers looks like a line of text to a character
+    # recogniser, and on one magnetic panel it was duly read as a CJK glyph -- after
+    # which the whole high-temperature tail of the series was deleted as text. A box
+    # that covers several markers of the same size is a misread, not a caption, so it is
+    # ignored. One marker beside a box is still a legend key and still goes.
+    misread = set()
+    if marker_band:
+        for bi, bx in enumerate(boxes):
+            hits = 0
+            for i in range(1, n):
+                x, y, w, h, area = (stats[i, cv2.CC_STAT_LEFT], stats[i, cv2.CC_STAT_TOP],
+                                    stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT],
+                                    stats[i, cv2.CC_STAT_AREA])
+                if not _in_band(w, h, area):
+                    continue
+                ox = max(0, min(x + w, bx[2]) - max(x, bx[0]))
+                oy = max(0, min(y + h, bx[3]) - max(y, bx[1]))
+                if ox * oy > 0.55 * w * h:
+                    hits += 1
+            if hits >= 3:
+                misread.add(bi)
     for i in range(1, n):
         x, y, w, h, area = (stats[i, cv2.CC_STAT_LEFT], stats[i, cv2.CC_STAT_TOP],
                             stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT],
@@ -83,7 +128,9 @@ def remove_text_and_legend(mask: np.ndarray, ocr_items, fr, lw_guess: float = 2.
         cc_box = (x, y, x + w, y + h)
         drop = False
         # (a) sits inside / mostly inside a recognised text box
-        for bx in boxes:
+        for bi, bx in enumerate(boxes):
+            if bi in misread:
+                continue
             ox = max(0, min(cc_box[2], bx[2]) - max(cc_box[0], bx[0]))
             oy = max(0, min(cc_box[3], bx[3]) - max(cc_box[1], bx[1]))
             if ox * oy > 0.55 * w * h:
@@ -102,8 +149,11 @@ def remove_text_and_legend(mask: np.ndarray, ocr_items, fr, lw_guess: float = 2.
                 if bx[1] - 2 <= cy <= bx[3] + 2 and 0 <= bx[0] - (x + w) < max(40, 3.0 * th):
                     drop = True
                     break
-        # (c) small compact blob, dense fill -> glyph
-        if not drop and w < 0.10 * Wp and h < 0.09 * Hp and area > 0.22 * w * h and area < 0.01 * total:
+        # (c) small compact blob, dense fill -> glyph, unless it is one of a population
+        # of identical blobs, in which case it is a data marker
+        in_band = _in_band(w, h, area)
+        if (not drop and not in_band and w < 0.10 * Wp and h < 0.09 * Hp
+                and area > 0.22 * w * h and area < 0.01 * total):
             drop = True
         if drop:
             removed |= (lab == i)
@@ -688,6 +738,179 @@ def point_series(mask, labimg, cluster: int, fr, style: str):
     return out, sym, own
 
 
+
+def symbol_series(rgb, mask, fr, bg, min_points: int = 6):
+    """Every scatter series in a panel, found by grouping the symbols themselves.
+
+    Colour decomposition works on pixels, and on a scatter that is the wrong unit. Every
+    symbol carries a halo of blended edge pixels, so one series arrives as a saturated
+    cluster plus a pale one, and a series that fades or is drawn over another can be
+    split across both -- which is how a magnetic panel lost every point above 100 K to a
+    grey "halo" cluster while its own colour kept the rest.
+
+    A symbol is a better unit: it has one colour, which is the average over its whole
+    body and therefore stable, and one size and one shape. Series are then groups of
+    symbols that agree on all three. Solid and open symbols of the same colour are
+    different series (adsorption and desorption); so are circles and triangles of the
+    same colour, which pixel clustering cannot separate at all.
+
+    Returns [(xs, ys, rgb, size, fill, mask)], one entry per series.
+    """
+    # Tick marks and the axis lines themselves are small dark blobs in a regular row,
+    # which is exactly what a symbol population looks like. They are not data, and what
+    # separates them is where they sit: on the frame. A margin of one symbol keeps real
+    # points that merely come close to the axis.
+    mask = mask.copy()
+    ix0, ix1, iy0, iy1 = fr.interior(mask.shape)
+    pad = 3
+    mask[:iy0 + pad], mask[iy1 - pad + 1:] = False, False
+    mask[:, :ix0 + pad], mask[:, ix1 - pad + 1:] = False, False
+
+    n, lab, stats, cent = cv2.connectedComponentsWithStats(mask.astype(np.uint8), 8)
+    if n <= 1:
+        return []
+    W, H = max(fr.width, 1), max(fr.height, 1)
+    areas = stats[1:, cv2.CC_STAT_AREA].astype(float)
+    ws = stats[1:, cv2.CC_STAT_WIDTH].astype(float)
+    hs = stats[1:, cv2.CC_STAT_HEIGHT].astype(float)
+    aspect = np.maximum(ws, hs) / np.maximum(np.minimum(ws, hs), 1.0)
+    equant = (ws <= 0.06 * W) & (hs <= 0.06 * H) & (areas >= 6) & (aspect <= 2.2)
+    if equant.sum() < min_points:
+        return []
+    med = float(np.median(areas[equant]))
+    sym = max(float(np.sqrt(med)), 2.0)
+
+    # tick marks are small, evenly spaced and equant, and they sit *on* the axis line --
+    # which is the one thing a data point does not do
+    bands = [b for b in (fr.left_band, fr.right_band) if b]
+    rbands = [b for b in (fr.top_band, fr.bottom_band) if b]
+
+    def _on_axis(x, y, w, h):
+        return (any(x <= b[1] + 1 and x + w >= b[0] - 1 for b in bands)
+                or any(y <= b[1] + 1 and y + h >= b[0] - 1 for b in rbands))
+
+    pts = []            # (x, y, L, a, b, area, fill, component)
+    for i in range(len(areas)):
+        w, h, ar = ws[i], hs[i], areas[i]
+        if h <= 2 and w >= 4 * sym:
+            continue                                   # a legend rule
+        if _on_axis(stats[i + 1, cv2.CC_STAT_LEFT], stats[i + 1, cv2.CC_STAT_TOP], w, h):
+            continue                                   # a tick mark
+        sel = lab == (i + 1)
+        # Any equant blob is a symbol, whatever its size next to the others. Requiring it
+        # to match the modal size cost one magnetic panel its whole high-temperature
+        # tail: those squares are drawn larger than the rest of the series, and the
+        # median was dragged down by anti-aliasing fragments besides.
+        if equant[i] and ar >= 0.25 * med:
+            col = rgb_to_lab(rgb[sel].reshape(-1, 3))[:, :3].mean(0)
+            pts.append((float(cent[i + 1][0]), float(cent[i + 1][1]),
+                        col[0], col[1], col[2], ar,
+                        _symbol_filled(lab, stats, i + 1), i + 1))
+            continue
+        if ar < 3.0 * med:
+            continue                                   # debris, or a fragment of one
+        # symbols packed close enough to touch: their centres are the column centres
+        x0 = int(stats[i + 1, cv2.CC_STAT_LEFT])
+        y0 = int(stats[i + 1, cv2.CC_STAT_TOP])
+        sub = sel[y0:y0 + int(h), x0:x0 + int(w)]
+        for c in range(sub.shape[1]):
+            rows = np.flatnonzero(sub[:, c])
+            if rows.size == 0:
+                continue
+            for a_, b_ in group_consecutive(rows, gap=2):
+                if (b_ - a_ + 1) > 0.5 * H:
+                    continue
+                px = rgb[y0 + a_:y0 + b_ + 1, x0 + c].reshape(-1, 3)
+                col = rgb_to_lab(px)[:, :3].mean(0)
+                pts.append((float(x0 + c), float(y0 + (a_ + b_) / 2.0),
+                            col[0], col[1], col[2], med, -1, i + 1))
+    if len(pts) < min_points:
+        return []
+    P = np.asarray(pts, float)
+
+    # Group by colour, seeded from the densest colours first so that a series' own body
+    # claims its halo rather than the halo becoming a series. Every symbol ends up in
+    # some group: a leftover joins the nearest one instead of forming a series of its
+    # own, because a handful of edge-shaded symbols is never a curve the paper drew.
+    labcols = P[:, 2:5]
+    # counted over separate symbols, not over the columns a fused run contributes: a
+    # sparse series of twenty squares is a real series even beside a dense one of a
+    # thousand, and scaling the floor to the total would erase it
+    n_sym = int((P[:, 6] >= 0).sum())
+    floor = max(min_points, int(0.03 * max(n_sym, min_points)))
+    unassigned = np.ones(len(P), bool)
+    centres = []
+    while unassigned.any() and len(centres) < 8:
+        idx = np.flatnonzero(unassigned)
+        d = np.linalg.norm(labcols[idx][:, None, :] - labcols[idx][None, :, :], axis=2)
+        seed = idx[int(np.argmax((d < 16).sum(1)))]
+        near = unassigned & (np.linalg.norm(labcols - labcols[seed], axis=1) < 16)
+        if near.sum() < floor:
+            break
+        centres.append(labcols[near].mean(0))
+        unassigned[near] = False
+    if not centres:
+        return []
+    # Overlapping symbols and anti-aliased edges shift a colour along one line only: the
+    # one joining it to the background. So two centres that differ merely in how far
+    # along that line they sit are the same series drawn over itself, and splitting on
+    # them turned one blue isotherm into six. Merge them, keeping the most saturated as
+    # the representative -- it is the colour the pen actually is.
+    crgb = [_lab_to_rgb(c) for c in centres]
+    keep = list(range(len(centres)))
+    for i in range(len(centres)):
+        for j in range(len(centres)):
+            if i == j or keep[i] != i or keep[j] != j:
+                continue
+            if _is_blend(crgb[i], crgb[j], bg) or _is_blend(crgb[j], crgb[i], bg):
+                di = float(np.linalg.norm(np.asarray(crgb[i], float) - np.asarray(bg, float)))
+                dj = float(np.linalg.norm(np.asarray(crgb[j], float) - np.asarray(bg, float)))
+                dull, bright = (i, j) if di < dj else (j, i)
+                keep[dull] = bright
+    centres = [centres[k] for k in range(len(centres)) if keep[k] == k]
+    C = np.asarray(centres)
+    owner = np.argmin(np.linalg.norm(labcols[:, None, :] - C[None, :, :], axis=2), axis=1)
+    groups = [np.flatnonzero(owner == k) for k in range(len(C))]
+    groups = [g for g in groups if len(g) >= min_points]
+
+    out = []
+    for g in groups:
+        sub = P[g]
+        # inside one colour, an open symbol and a solid one are different series, and so
+        # are two clearly different sizes -- a circle and a triangle drawn the same colour
+        keys = []
+        fill = sub[:, 6]
+        known = int((fill == 1).sum()) + int((fill == 0).sum())
+        if known >= 8 and (fill == 1).sum() >= 0.15 * known and (fill == 0).sum() >= 0.15 * known:
+            keys = [fill == 1, fill == 0]
+            unk = fill == -1
+            if unk.any():
+                keys[int(np.argmax([k.sum() for k in keys]))] |= unk
+        else:
+            keys = [np.ones(len(sub), bool)]
+        for k in keys:
+            if k.sum() < min_points:
+                continue
+            q = sub[k]
+            o = np.argsort(q[:, 0])
+            q = q[o]
+            if (q[:, 0].max() - q[:, 0].min()) < 0.1 * W:
+                continue
+            col = tuple(int(v) for v in _lab_to_rgb(q[:, 2:5].mean(0)))
+            # its own ink, so every check downstream compares this series against the
+            # symbols it came from rather than against everything in the panel
+            comp = np.unique(q[:, 7].astype(int))
+            m = np.isin(lab, comp) & mask
+            out.append((q[:, 0].copy(), q[:, 1].copy(), col,
+                        float(np.sqrt(np.median(q[:, 5]))), int(np.median(q[:, 6])), m))
+    return out
+
+
+def _lab_to_rgb(labv):
+    arr = np.asarray(labv, np.float32).reshape(1, 1, 3)
+    return cv2.cvtColor(arr, cv2.COLOR_LAB2RGB).reshape(3) * 255.0
+
+
 def connector_lines(curves, fr) -> list[int]:
     """Indices of series that are a guide line threading a scatter, not data.
 
@@ -1199,6 +1422,30 @@ def extract_curves(rgb, mask, fr, labimg, clusters, max_per_cluster: int = 8,
     """
     if not clusters:
         return []
+    # A scatter is grouped by its symbols, not by its pixels, and that is a decision
+    # about the whole panel rather than about one colour -- two series can share a
+    # colour and be told apart by their symbol, which no per-colour loop could do.
+    if style_hint in ("markers", "markers_joined_by_lines"):
+        ss = symbol_series(rgb, mask, fr, bg_color)
+        if ss:
+            out = []
+            for xs_, ys_, col, size, _f, smask in ss:
+                # the colour cluster the points actually sit on, so the verification
+                # step compares each series against its own ink and not an index
+                yi = np.clip(np.round(ys_).astype(int), 0, labimg.shape[0] - 1)
+                xi = np.clip(np.round(xs_).astype(int), 0, labimg.shape[1] - 1)
+                lv = labimg[yi, xi]
+                lv = lv[lv >= 0]
+                cid = int(np.bincount(lv).argmax()) if lv.size else 0
+                out.append(Curve(xs=xs_, ys=ys_, cluster=cid, rgb=col,
+                                 linewidth=max(size, 2.0), reward=float(len(xs_)),
+                                 coverage=(xs_.max() - xs_.min()) / max(fr.width, 1),
+                                 seg_ids=[], mask=smask, style="markers", chained=True,
+                                 marker_px=size))
+            for i in sorted(connector_lines(out, fr), reverse=True):
+                del out[i]
+            return out
+
     nodes, segments, sedge, seg_of = build_graph(mask)
     segment_counts(segments, labimg, len(clusters))
     Wp = max(fr.width, 1)

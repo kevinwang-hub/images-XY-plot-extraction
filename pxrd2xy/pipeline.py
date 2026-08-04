@@ -152,7 +152,8 @@ def digitize(path: str, outdir: str, cache_dir: str | None = None,
         for k, c in enumerate(cs):
             pix = vf.verify_curve(c, data_ink, labimg, c.mask, fr)
             rt = vf.roundtrip_metrics(sm[k], c.mask, labimg == c.cluster, data_ink, fr,
-                                      c.linewidth)
+                                      c.linewidth,
+                                      getattr(c, "style", "line") == "markers")
             out.append(vf.combine_metrics(pix, rt, getattr(c, "style", "line")))
         return out
 

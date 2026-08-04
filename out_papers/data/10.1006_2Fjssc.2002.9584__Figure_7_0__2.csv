@@ -1,0 +1,17 @@
+# paper: 10.1006%2Fjssc.2002.9584
+# figure: Figure 7  panel: Figure_7_0
+# technique: magnetic_susceptibility  material: [Cu(ndc)(pyridine)] (CPO-2-Cu)
+# series: [Cu(ndc)(pyridine)] (CPO-2-Cu)  (unknown)
+# x: Temperature (K)   y: arb. units, 0 = bottom axis, 1 = top of plot box
+x,y
+-3.05344,0.911473
+-3.05344,0.771246
+-3.05344,0.631728
+-3.05344,0.489377
+-3.05344,0.350567
+-3.05344,0.209632
+-3.05344,0.068697
+-0.76336,0.002833
+10.30534,0.204674
+22.13740,0.138810
+249.61832,0.068697
