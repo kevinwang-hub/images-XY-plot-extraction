@@ -292,8 +292,11 @@ def _card(r: dict, outdir: str) -> str:
             f'{r.get("image_size", ["?", "?"])[0]}×{r.get("image_size", ["?", "?"])[1]} px</span></div>'
             f'<div class="grid"><div class="viewer">'
             f'<div class="tabs" id="tabs-{name}">{tabs}</div>'
-            f'<img id="img-{name}" src="{html.escape(img0)}" onclick="cycle(\'{name}\')" '
-            f'alt="{name}" loading="lazy">'
+            # 265 panels carry five views each, so a corpus-scale report holds over a
+            # thousand embedded images. Decoding them all at parse time is what makes the
+            # page feel broken rather than slow; lazy defers everything below the fold.
+            f'<img id="img-{name}" src="{html.escape(img0)}" loading="lazy" '
+            f'decoding="async" onclick="cycle(\'{name}\')" alt="{name}">'
             f'<div class="cap" id="cap-{name}">{html.escape(views[0][2])}</div>'
             f'</div><div>{"".join(body)}</div></div></div>')
 

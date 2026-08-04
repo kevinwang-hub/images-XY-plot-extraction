@@ -282,7 +282,12 @@ def build(recs: list, outdir: str, title: str = "Papers → xy data") -> str:
                 f'{html.escape(p.get("technique_detail") or "")}</span></div>'
                 f'<div class="grid"><div class="viewer">'
                 f'<div class="tabs" id="tabs-{pid}">{tabs}</div>'
-                f'<img id="img-{pid}" src="{views[0][1]}" onclick="cycle(\'{pid}\')">'
+                # At corpus scale this page carries 265 panels of five views each -- over
+                # a thousand embedded images. Decoding them all while parsing is what
+                # makes a large report look broken rather than slow, so everything below
+                # the fold waits until it is scrolled to.
+                f'<img id="img-{pid}" src="{views[0][1]}" loading="lazy" '
+                f'decoding="async" onclick="cycle(\'{pid}\')">'
                 f'<div class="cap" id="cap-{pid}">{html.escape(views[0][2])}</div></div>'
                 f'<div><table><thead><tr>'
                 + "".join(f"<th>{h}</th>" for h in
