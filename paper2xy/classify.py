@@ -129,7 +129,12 @@ def classify(items: list[dict], client=None, batch: int = 5,
                           [hashlib.sha1(b.encode()).hexdigest() for b in imgs],
                           [(it.get("caption") or "")[:700] for it in chunk])
         hit = llmcache.get(ck)
-        if hit is not None:
+        # A cached answer that is missing a field is worse than no answer: the panel
+        # silently falls through to the weakest path with nothing to say why. Treat it
+        # as a miss and ask again.
+        if hit is not None and all(
+                p.get("render_style") or not p.get("digitizable")
+                for p in hit.get("panels", [])):
             for p in hit.get("panels", []):
                 out[str(p.get("id"))] = p
             continue
@@ -159,6 +164,20 @@ def classify(items: list[dict], client=None, batch: int = 5,
         llmcache.put(ck, data)
         for p in data.get("panels", []):
             out[str(p.get("id"))] = p
+
+    # A few panels come back without a render_style even though the schema requires one,
+    # and a panel with no style falls through to the geometry -- which is the one thing
+    # measured not to work. Asking again one at a time fixes it: the field is dropped
+    # when several images share a request, not when the question is about one panel.
+    missing = [it for it in items
+               if out.get(it["id"], {}).get("digitizable")
+               and not out.get(it["id"], {}).get("render_style")]
+    if missing and batch > 1:
+        for it in missing:
+            again = classify([it], client=client, batch=1, model=model)
+            got = again.get(it["id"])
+            if got and got.get("render_style"):
+                out[it["id"]]["render_style"] = got["render_style"]
     return out
 
 
