@@ -1,5 +1,13 @@
 # pxrd2xy — PXRD figures → numerical xy data, with a visual verifier
 
+> **Using this as a tool?** The pipeline is packaged separately at
+> [kevinwang-hub/paper2xy](https://github.com/kevinwang-hub/paper2xy) — a pixi
+> environment and a CLI that takes a directory of PDFs and writes categorised panel
+> images (`pxrd/`, `tga/`, `gas_adsorption_isotherm/`, …) with the extracted values as
+> CSV/JSON. This repository holds the research: corpus results, dashboards, and the
+> reader comparisons.
+
+
 Turns published powder-XRD figures into machine-readable
 `(2θ, intensity)` data, and **verifies every curve** by re-plotting the extracted numbers
 back into the xy-plane and measuring how well the re-plotted line overlaps the ink of the
