@@ -16,3 +16,7 @@ out_llm/pixels/
 out_llm/opus-5_high/
 out_llm/opus-5_max/
 out_llm/fable-5_high/
+out_scatter_cmp/img/
+out_scatter53/
+out_llm53.json
+.llmcache/

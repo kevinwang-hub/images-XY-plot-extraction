@@ -176,7 +176,18 @@ def run(pdf_paths: list, outdir: str, only: set | None = None,
     import anthropic
     client = anthropic.Anthropic()
     os.makedirs(outdir, exist_ok=True)
-    llmcache.DIR = llmcache.DIR or os.path.join(outdir, ".llmcache")
+    # The cache is content-addressed -- its keys are sha1 of the images and the prompt --
+    # so it is safe to share across runs and output directories, and expensive not to.
+    # Defaulting it to the *output* directory meant that pointing a run at a new -o path
+    # silently started from cold and re-paid for classification already done: a 28-paper
+    # re-run of an already-classified corpus cost $4.20 instead of the $0.50 of genuinely
+    # new work. PAPER2XY_CACHE overrides; otherwise it sits beside the code, once.
+    llmcache.DIR = llmcache.DIR or os.environ.get("PAPER2XY_CACHE") or \
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".llmcache")
+    if not os.path.isdir(llmcache.DIR):
+        os.makedirs(llmcache.DIR, exist_ok=True)
+        print(f"    note: model cache starts empty at {llmcache.DIR} -- this run pays "
+              f"full price for every classification")
     recs = []
     for i, p in enumerate(pdf_paths, 1):
         try:
@@ -226,6 +237,13 @@ def export(recs: list, outdir: str) -> str:
                         x_calibrated=p.get("axis", {}).get("x_calibrated"),
                         y_calibrated=p.get("axis", {}).get("y_calibrated"),
                         y_units=p.get("y_units", ""),
+                        # Which reader produced these numbers. A pooled dataset that
+                        # mixes readers without saying which is which is not a dataset --
+                        # the two have different error characters, and a consumer has to
+                        # be able to select or weight on it.
+                        method=c.get("method", "pixels"),
+                        model=c.get("model", ""),
+                        drawn_as=p.get("render_style", ""),
                         status=c.get("status"), quality=c.get("quality"),
                         xy_data=[[round(x, 5), round(y, 6)]
                                  for x, y in zip(c.get("x", []), c.get("y", []))],
@@ -243,6 +261,8 @@ def export(recs: list, outdir: str) -> str:
                                  f"  ({c.get('role','')})\n")
                         cf.write(f"# x: {p.get('axis',{}).get('x_axis_label','')}"
                                  f"   y: {p.get('y_units','')}\n")
+                        cf.write(f"# read by: {c.get('method','pixels')}"
+                                 f"{(' (' + c['model'] + ')') if c.get('model') else ''}\n")
                         cf.write("x,y\n")
                         for x, y in zip(c.get("x", []), c.get("y", [])):
                             cf.write(f"{x:.5f},{y:.6f}\n")
