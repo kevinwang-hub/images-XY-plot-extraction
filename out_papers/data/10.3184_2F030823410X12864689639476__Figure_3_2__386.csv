@@ -1,7 +1,7 @@
 # paper: 10.3184%2F030823410X12864689639476
 # figure: Figure 3  panel: Figure_3_2
-# technique: photoluminescence  material: transition metal-cyanopyridine polymer (complex 2 or 3, i.e. [CuCl2(pyridine-4-carbonitrile)2]n or [CoCl2(pyridine-4-carbonitrile)2]n)
-# series: free ligand pyridine-n-carbonitrile spectrum (inset comparison)  (reference)
+# technique: photoluminescence  material: [CuCl2(pyridine-4-carbonitrile)2]n (complex 2, tentative)
+# series: [CuCl2(pyridine-4-carbonitrile)2]n — emission spectrum  (experimental)
 # x: (c)   y: data units from y ticks
 x,y
 358.52597,4.563253

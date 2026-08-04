@@ -1,7 +1,7 @@
 # paper: 10.1039%2FC3CE41975D
 # figure: Figure 9  panel: Figure_9_0
 # technique: magnetic_susceptibility  material: [CuSr(pydc)2(H2O)4]n (2)
-# series: [CuSr(pydc)2(H2O)4]n (2)  (unknown)
+# series: [CuSr(pydc)2(H2O)4]n (2) — χM vs. T  (experimental)
 # x: TIK   y: data units from y ticks
 x,y
 -0.30349,0.092994

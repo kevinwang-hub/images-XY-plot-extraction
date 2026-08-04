@@ -35,13 +35,29 @@ METHOD_HTML = """
 <td>Ask a model to read values; trace pixels</td>
 <td><b>Pixels.</b> Unchanged from the verified engine: OCR-calibrated axes, colour decomposition, segment graph, pen-width deconvolution, round-trip verification. Nothing in the numeric path depends on a model reading a coordinate.</td></tr>
 
-<tr><td><b>Series drawn as symbols</b><br>(isotherms, magnetic data)</td>
-<td>Stroke tracing; marker centroids; per-column cloud centre</td>
-<td><b>Cloud centre, chosen by outcome.</b> Stroke tracing shatters a symbol series into fragments — one magnetic panel came back as 11 pieces, 7 of them identical. Centroids fail too once symbols crowd and fuse into one blob. Tracing the vertical centre of each column works for both, and is only used when stroke tracing measurably did worse, so line plots are untouched.</td></tr>
+<tr><td><b>Lines or points?</b></td>
+<td>Component-size statistics; isolated-symbol fractions; <b>ask the classifier</b></td>
+<td><b>Ask, then dispatch.</b> A continuous stroke and a row of symbols need different algorithms, and no pixel statistic separates them reliably: symbols packed tightly enough look like a stroke, and a stroke chopped by overlapping curves looks like symbols. But it is obvious at a glance — so the classifier, which is already looking at the panel, answers one more question (<code>lines</code>, <code>markers</code>, <code>markers joined by lines</code>, <code>mixed</code>) and that picks the tracer. It is still only ever asked what something <i>is</i>.</td></tr>
+
+<tr><td><b>Tracing points</b><br>(isotherms, magnetic data)</td>
+<td>Stroke tracing; marker centroids; per-column average; <b>continuity chaining</b></td>
+<td><b>Chain the points.</b> Stroke tracing shatters a symbol series — one magnetic panel came back as 11 pieces, 7 identical. Averaging each column's ink is worse in a subtler way: in a column holding both the curve <i>and</i> a legend key, an inset, or a clipped-in neighbour, it averages two unrelated things and spikes. Instead every symbol becomes a point, and the series is the most continuous path through them: each point taken is worth one, each step costs the vertical distance travelled, and columns may be skipped for free. A detour to a legend key pays that distance twice to gain one point, so it never pays; a genuinely steep curve pays it once and has no alternative, so it is still traced.</td></tr>
+
+<tr><td><b>Tracing lines</b></td>
+<td>Segment graph; point tracer; <b>both, by outcome</b></td>
+<td><b>The graph leads.</b> It is the specialist where curves cross and have to be told apart by what connects to what. On a panel classified as lines the column-averaging fallback is switched off entirely — it exists only to rescue a symbol series, and on a line panel it manufactures one out of whatever shares each column. Where the style is genuinely ambiguous, both tracers run and the one covering more of the axis is kept.</td></tr>
+
+<tr><td><b>Not-a-series colours</b></td>
+<td>Trust the clustering; <b>test the best path</b></td>
+<td><b>Test it.</b> The blend along the boundary between two overlapping curves survives colour clustering and still yields a best path, because the search returns the best path through whatever it is given. What gives it away is that its best path is <i>still</i> wild. Measured across this corpus, real series make at most one step longer than a quarter of the plot height; blend debris made thirteen.</td></tr>
+
+<tr><td><b>Insets</b></td>
+<td>Ignore them; <b>detect by their own axes</b></td>
+<td><b>Detect, then drop after clustering.</b> An inset is a second plot sharing the host's colours, so nothing downstream can tell its curves from the host's — a trace walks out of the main plot into the inset with nothing looking wrong locally. What gives an inset away is that it brings its own axes: a long vertical run meeting a long horizontal run well inside the host frame, both solid and of constant thickness, enclosing a box far too small to be the host's. It must be removed <i>after</i> the colours are decided: clustering the smaller image redraws the cluster boundaries and cost a curve the inset had been helping to define.</td></tr>
 
 <tr><td><b>Hysteresis loops</b></td>
-<td>Single y(x) trace; upper/lower branch split</td>
-<td><b>Split into two branches.</b> An adsorption isotherm is not a function — desorption crosses back over the same pressures — so a single-valued trace skips those columns as ambiguous. Where a symbol series occupies two separated runs per column, the upper and lower runs become two series, which is what the two physical branches are.</td></tr>
+<td>Single y(x) trace; split by symbol fill; upper/lower envelope</td>
+<td><b>Both splits, in that order.</b> Two arms of a loop are each perfectly continuous, so chaining alone runs up one and back along the other — it pays the crossing once and is rewarded in every column after it. Adsorption and desorption are conventionally solid and open symbols of the same colour, so where both styles are present the arms come apart by construction; where the symbols have fused too much to tell, the arms are split by which is above the other, but only if they are apart over a sustained stretch of the axis rather than in scattered columns.</td></tr>
 
 <tr><td><b>Name a curve labelled "1a"</b></td>
 <td>Caption only; caption + citing paragraphs + paper opening</td>
@@ -60,6 +76,10 @@ LIMITS_HTML = """
 white gutter, the crop can carry a slice of its neighbour. The digitiser then reads real ink
 that belongs to the other panel, and the curve is marked <b>fail</b> on coverage rather than
 silently exported as good — which is the behaviour you want, but the crop is still wrong.</td></tr>
+<tr><td><b>Dense fused symbols</b></td><td>Where a series is drawn as large circles that
+overlap their neighbours, individual symbols cannot be recovered and neither branch split
+applies — the arms of such a loop are still traced as one curve that crosses between them.
+Flagged <b>fail</b>, not exported as clean.</td></tr>
 <tr><td><b>Legend text</b></td><td>OCR reads legend strings off the panel, and inside a busy
 plot it sometimes returns a fragment (<code>200</code>) or two words fused
 (<code>Openintermediate</code>). The context stage recovers the real identity from the paper

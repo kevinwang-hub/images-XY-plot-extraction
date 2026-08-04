@@ -263,8 +263,11 @@ because `claude-opus-5` was 21/21 correct on the test set, leaving no accuracy g
 | get figures out of a PDF | embedded image objects; layout model; **render page regions** | Image objects are confetti in one paper (5086 fragments for one figure) and absent in vector-drawn ones. Region rendering handles both with no model. |
 | split a composite figure | ask the vision model for boxes; **detect axes** | Vision-model coordinates are roughly right and precisely wrong. Axes are exactly detectable and double as a free filter. |
 | plot vs. molecular structure | size heuristics; **ticks**; **vision classifier** | Bonds pair into convincing right angles. Ticks kill most; the classifier kills the rest. |
-| symbol-drawn series | stroke tracing; marker centroids; **per-column cloud centre** | Stroke tracing shattered one magnetic panel into 11 pieces, 7 identical. Centroids fail once symbols fuse. Column centres survive both, and are only used where stroke tracing measurably did worse. |
-| hysteresis loops | single trace; **upper/lower branch split** | An isotherm is not a function; a single-valued trace drops the columns where the loop is open. |
+| lines or points? | component-size statistics; isolated-symbol fractions; **ask the classifier** | Nothing in the pixels separates them reliably — symbols packed tightly look like a stroke, a stroke chopped by overlaps looks like symbols — but it is obvious at a glance. The classifier is already looking at the panel, so it answers one more question (`lines` / `markers` / `markers_joined_by_lines` / `mixed`) and that picks the tracer. On a `lines` panel the column-averaging fallback is switched off entirely. |
+| symbol-drawn series | stroke tracing; marker centroids; per-column cloud centre; **continuity chaining** | Stroke tracing shattered one magnetic panel into 11 pieces, 7 identical. Column averaging is worse in a subtler way: in a column holding both the curve *and* a legend key, an inset, or a clipped-in neighbour, it averages two unrelated things. Chaining reduces each symbol to a point and takes the most continuous path — a detour to a legend key pays its distance twice to gain one point, so it never pays. |
+| colours that are not series | trust the clustering; **test the best chain** | The blend along the boundary between two overlapping curves still yields a best chain. Across this corpus real series make at most one step longer than a quarter of the plot height; blend debris made thirteen. |
+| insets | ignore; **detect by their own axes** | An inset shares the host's colours, so nothing downstream can tell its curves from the host's. It is given away by bringing its own axes — two solid constant-thickness runs meeting well inside the host frame. Removed *after* clustering: clustering the smaller image redraws the cluster boundaries and cost a curve the inset had been helping to define. |
+| hysteresis loops | single trace; **split by symbol fill**, then **by envelope** | Both arms are continuous, so chaining runs up one and back along the other. Adsorption and desorption are conventionally solid and open symbols, so where both styles are present the arms come apart by construction; otherwise they are split by which is above the other, and only where they are apart over a sustained stretch. |
 | resolving `1a` | caption only; **caption + citing paragraphs + paper opening** | The compound is named once, far from the figure. Every resolution carries the quoted phrase that justifies it. |
 
 ## Awkward papers, handled
@@ -283,6 +286,9 @@ because `claude-opus-5` was 21/21 correct on the test set, leaving no accuracy g
   of its neighbour; the curve then fails on coverage rather than being exported as good.
 - **Legend OCR** returns fragments inside busy plots (`200`, `Openintermediate`). The context
   stage recovers the real identity from the paper text anyway.
+- **Dense fused symbols.** Where large circles overlap their neighbours, individual symbols
+  cannot be recovered and neither branch split applies; the arms of such a loop are traced as
+  one curve that crosses between them, and flagged `fail`.
 - **Peaks narrower than the pen** come back with position and height right, width inflated.
 - **Dashed curves** are traced as the fragments they are drawn as.
 - **Partial branches** (a desorption arm covering half the pressure range) are flagged for not

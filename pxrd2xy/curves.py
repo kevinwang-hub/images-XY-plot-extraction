@@ -89,8 +89,13 @@ def remove_text_and_legend(mask: np.ndarray, ocr_items, fr, lw_guess: float = 2.
             if ox * oy > 0.55 * w * h:
                 drop = True
                 break
-        # (b) short flat stroke just left of a text box -> legend key line
-        if not drop and w < 0.25 * Wp and h <= max(6.0, 3.0 * lw_guess):
+        # (b) short stroke or symbol just left of a text box -> legend key.
+        # A key drawn as a marker is as tall as it is wide, so a flat-stroke test misses
+        # it; what identifies a key of either kind is that it is small and sits on the
+        # text's own row, just before it. Left in, such a marker is data-coloured ink in
+        # the middle of the plot and every tracer will try to account for it.
+        if not drop and w < 0.25 * Wp and (h <= max(6.0, 3.0 * lw_guess)
+                                           or (h < 0.05 * Hp and w < 0.15 * Wp)):
             cy = y + h / 2.0
             for bx in boxes:
                 th = bx[3] - bx[1]
@@ -481,6 +486,7 @@ class Curve:
     mask: np.ndarray = None
     legend: str = ""
     legend_source: str = ""
+    chained: bool = False
     n_added_left: int = 0
     n_added_right: int = 0
     style: str = "line"          # "line" or "markers"
@@ -531,6 +537,340 @@ def _linewidth(segments, path, labimg, cluster) -> float:
     if len(flat) >= 20:
         lw = min(lw, np.median(np.array(flat)))
     return float(max(1.0, round(lw)))
+
+
+def marker_cloud(mask, labimg, cluster: int, fr, require_population: bool = True):
+    """Every symbol of one colour, reduced to a point.
+
+    Returns (xs, ys, symbol_size, filled) or None when the colour is not symbols.
+    `filled` is 1 for a solid symbol, 0 for an open one and -1 where symbols have fused
+    and the distinction cannot be made.
+
+    A symbol series is a population of similar small blobs. The modal blob size is
+    therefore the symbol size, and anything much wider than that is symbols that have
+    fused — those are cut back into one point per column, which is where their centres
+    lie. Blobs that are wide and only a pixel or two tall are legend rules, not data.
+    """
+    own = (labimg == cluster) & mask
+    n, lab, stats, cent = cv2.connectedComponentsWithStats(own.astype(np.uint8), 8)
+    if n <= 6:
+        return None
+    W, H = max(fr.width, 1), max(fr.height, 1)
+    areas = stats[1:, cv2.CC_STAT_AREA].astype(float)
+    ws = stats[1:, cv2.CC_STAT_WIDTH].astype(float)
+    hs = stats[1:, cv2.CC_STAT_HEIGHT].astype(float)
+    # A handful of anti-aliasing speckles beside a solid stroke is not a symbol series,
+    # and chaining them yields a short curve that looks plausible and is not real. A
+    # symbol series is a population by *ink*, not merely by component count: either its
+    # symbols stand separately and hold most of the colour, or they have fused into runs
+    # and no single run dominates. One long stroke with crumbs around it is neither.
+    small = (ws <= 0.06 * W) & (hs <= 0.06 * H) & (areas >= 3)
+    if small.sum() < 10:
+        return None
+    total = float(areas.sum())
+    separate = float(areas[small].sum()) >= 0.25 * total
+    fused = len(areas) >= 10 and areas.max() <= 0.60 * total
+    # Without a hint this has to be inferred, and the test is deliberately strict so a
+    # solid stroke with anti-aliasing crumbs around it is not mistaken for a population.
+    # When the panel has been classified as symbol-drawn there is nothing to infer.
+    if require_population and not (separate or fused):
+        return None
+    sym = float(np.median(np.sqrt(areas[small])))
+    sym = max(sym, 2.0)
+    xs, ys, fill = [], [], []
+    for i in range(len(areas)):
+        w, h = ws[i], hs[i]
+        if h <= 2 and w >= 4 * sym:
+            continue                                  # a legend rule, not a marker
+        if w <= 2.5 * sym and h <= 2.5 * sym:
+            xs.append(float(cent[i + 1][0]))
+            ys.append(float(cent[i + 1][1]))
+            fill.append(_symbol_filled(lab, stats, i + 1))
+            continue
+        x0 = int(stats[i + 1, cv2.CC_STAT_LEFT])
+        y0 = int(stats[i + 1, cv2.CC_STAT_TOP])
+        sub = lab[y0:y0 + int(h), x0:x0 + int(w)] == (i + 1)
+        for c in range(sub.shape[1]):                 # fused symbols: one point per column
+            rows = np.flatnonzero(sub[:, c])
+            if rows.size == 0:
+                continue
+            for a, b in group_consecutive(rows, gap=2):
+                if (b - a + 1) > 0.5 * H:
+                    continue
+                xs.append(float(x0 + c))
+                ys.append(float(y0 + (a + b) / 2.0))
+                fill.append(-1)
+    if len(xs) < 40:
+        return None
+    o = np.argsort(xs)
+    return (np.asarray(xs, float)[o], np.asarray(ys, float)[o], sym,
+            np.asarray(fill, np.int8)[o])
+
+
+def _symbol_filled(lab, stats, i: int) -> int:
+    """1 if a symbol is solid, 0 if it is drawn open (a ring), -1 if it cannot be told.
+
+    An open symbol encloses background: a region of non-symbol pixels inside its bounding
+    box that cannot be reached from the box edge. A solid one does not.
+    """
+    x0 = int(stats[i, cv2.CC_STAT_LEFT])
+    y0 = int(stats[i, cv2.CC_STAT_TOP])
+    w = int(stats[i, cv2.CC_STAT_WIDTH])
+    h = int(stats[i, cv2.CC_STAT_HEIGHT])
+    if w < 4 or h < 4:
+        return -1
+    sub = (lab[y0:y0 + h, x0:x0 + w] == i)
+    pad = np.zeros((h + 2, w + 2), np.uint8)
+    pad[1:-1, 1:-1] = ~sub
+    n, bl = cv2.connectedComponents(pad, 4)
+    outside = bl[0, 0]
+    for k in range(1, n):
+        if k == outside:
+            continue
+        if (bl == k).sum() >= 0.12 * w * h:
+            return 0
+    return 1
+
+
+def _chain(xs, ys, alive, fr, jump: float = 3.0, gap_pen: float = 2.0):
+    """The most continuous single-valued path through a cloud of marker points.
+
+    Each point taken is worth 1; each step costs the vertical distance travelled, as a
+    fraction of the plot height, weighted heavily. A series that jumps down to a legend
+    key and back pays that distance twice to gain one point, so it never pays -- while a
+    genuinely steep curve pays it once and has no alternative, so it is still traced.
+    Columns can be skipped for free, which is what lets the chain ignore a legend
+    entirely rather than being dragged through it.
+    """
+    idx = np.flatnonzero(alive)
+    if idx.size < 12:
+        return None
+    px, py = xs[idx], ys[idx]
+    H, W = max(fr.height, 1), max(fr.width, 1)
+    n = len(px)
+    score = np.zeros(n)
+    back = np.full(n, -1, int)
+    starts = np.searchsorted(px, px, side="left")     # first point in this x column
+    for i in range(n):
+        s = starts[i]
+        if s == 0:
+            score[i] = 1.0
+            continue
+        cost = (score[:s] - jump * np.abs(py[:s] - py[i]) / H
+                - gap_pen * (px[i] - px[:s]) / W)
+        j = int(np.argmax(cost))
+        if cost[j] > 0:
+            score[i], back[i] = cost[j] + 1.0, j
+        else:
+            score[i] = 1.0
+    end = int(np.argmax(score))
+    path = []
+    while end >= 0:
+        path.append(end)
+        end = back[end]
+    path = np.asarray(path[::-1])
+    # Skipping columns is free, which is what lets a chain ignore a legend; the cost is
+    # that it will also step clean across a wide empty stretch to pick up whatever lies
+    # on the far side, and the re-plot then draws a straight line through blank paper.
+    # Nothing was read there, so nothing should be reported there: keep the longest run
+    # that is actually continuous.
+    gaps = np.flatnonzero(np.diff(px[path]) > max(0.08 * W, 20))
+    if gaps.size:
+        bounds = np.concatenate(([0], gaps + 1, [len(path)]))
+        k = int(np.argmax(np.diff(bounds)))
+        path = path[bounds[k]:bounds[k + 1]]
+    # A curve need not cross the whole plot: an excitation spectrum plotted beside an
+    # emission spectrum covers its own third of the axis and nothing more.
+    if len(path) < 12 or (px[path].max() - px[path].min()) < 0.15 * W:
+        return None
+    return idx[path], px[path], py[path]
+
+
+def chain_traces(mask, labimg, cluster: int, fr, max_chains: int = 2,
+                 require_population: bool = True):
+    """Trace a symbol-drawn series, and its second branch where the figure has one.
+
+    Replaces column averaging, which cannot tell the curve's own ink from a legend key,
+    an inset, or a neighbouring panel that the crop clipped in: it averages whatever
+    shares the column. Chaining asks instead which points continue each other.
+    """
+    cloud = marker_cloud(mask, labimg, cluster, fr, require_population)
+    if cloud is None:
+        return None
+    xs, ys, sym, fill = cloud
+    own = (labimg == cluster) & mask
+    # Adsorption and desorption are conventionally drawn as solid and open symbols of
+    # the same colour, and that convention is the only local evidence that separates
+    # them: the two arms are each perfectly continuous, so a most-continuous path is
+    # free to run up one and back along the other, paying the crossing once and being
+    # rewarded in every column after it. Where both symbol styles are present in
+    # quantity, chain each style on its own and the arms come apart by construction.
+    sides = _split_by_fill(xs, ys, fill, fr)
+    if sides is not None:
+        got = [_chain(sx, sy, np.ones(len(sx), bool), fr) for sx, sy in sides]
+        got = [g for g in got if g is not None and _plausible(g[2], fr)]
+        if len(got) == 2:
+            return [(g[1], g[2]) for g in got], float(sym), own, _iso_frac(fill)
+    # Two branches of one loop are both continuous, so a "most continuous path" is free
+    # to run along one, step across, and run back along the other -- it pays the crossing
+    # once and is rewarded in every column after it. Chaining cannot separate them; what
+    # separates them is that in the columns where the loop is open, one branch is simply
+    # above the other. Split there first, then chain each side to clean up outliers.
+    sides = _split_branches(xs, ys, sym, fr)
+    if sides is not None:
+        out = []
+        for sx, sy in sides:
+            got = _chain(sx, sy, np.ones(len(sx), bool), fr)
+            if got is not None and _plausible(got[2], fr):
+                out.append((got[1], got[2]))
+        if len(out) == 2:
+            return out, float(sym), own, _iso_frac(fill)
+    alive = np.ones(len(xs), bool)
+    out = []
+    for k in range(max_chains):
+        got = _chain(xs, ys, alive, fr)
+        if got is None:
+            break
+        sel, cx, cy = got
+        if not _plausible(cy, fr):
+            break
+        if k and not _is_branch(out[0], (cx, cy), fr):
+            break
+        out.append((cx, cy))
+        near = np.abs(ys[:, None] - cy[None, :])
+        col = np.abs(xs[:, None] - cx[None, :])
+        alive &= ~((near <= 1.5 * sym) & (col <= 1.5 * sym)).any(axis=1)
+    # An empty result is not the same as "not symbol-drawn": the colour *was* a
+    # population of symbols, and none of it was a series. Returning it, rather than
+    # None, is what stops the caller falling back to a tracer that will happily
+    # manufacture one out of the same debris.
+    return out, float(sym), own, _iso_frac(fill)
+
+
+def _iso_frac(fill) -> float:
+    """How much of a cloud was symbols standing on their own.
+
+    Chaining also handles curves drawn as continuous strokes -- their ink is cut into one
+    point per column and chained just the same -- so succeeding at it is not evidence that
+    a series is symbol-drawn. Isolated symbols are. This decides only how the series is
+    labelled and re-plotted for verification, never how it was read.
+    """
+    return float(np.mean(fill != -1)) if len(fill) else 0.0
+
+
+def _emit_chains(out, ch, cluster, Wp: int, style: str) -> None:
+    chains, size, cmask, _ = ch
+    for cx, cy in chains:
+        out.append(Curve(xs=cx, ys=cy, cluster=cluster.idx, rgb=cluster.rgb,
+                         linewidth=max(size, 2.0), reward=float(len(cx)),
+                         coverage=(cx.max() - cx.min()) / Wp, seg_ids=[], mask=cmask,
+                         style=style, chained=True,
+                         marker_px=size if style == "markers" else 0.0))
+
+
+def _plausible(cy, fr) -> bool:
+    """Could this chain be a data series at all?
+
+    A colour that survives clustering without being a series -- the blend along the
+    boundary between two overlapping curves, say -- still yields a best chain, because
+    the DP returns the best path through whatever it is given. What gives it away is
+    that its best path is still wild: a real series moves by about a symbol from one
+    symbol to the next, so it cannot keep crossing a large part of the plot. A steep
+    curve makes such a step once or twice; blend debris makes one every few points.
+    """
+    if len(cy) <= 2:
+        return True
+    big = int((np.abs(np.diff(cy)) > 0.25 * max(fr.height, 1)).sum())
+    return big <= max(3, 0.01 * len(cy))
+
+
+def _split_by_fill(xs, ys, fill, fr, min_frac: float = 0.15):
+    """Split a symbol cloud into its solid and open symbols, or None if it is not mixed.
+
+    Fused symbols cannot be classified, so they are offered to both sides and the
+    continuity of each chain decides which one keeps them.
+    """
+    W = max(fr.width, 1)
+    solid, open_ = fill == 1, fill == 0
+    n = max(int(solid.sum()) + int(open_.sum()), 1)
+    if solid.sum() < min_frac * n or open_.sum() < min_frac * n:
+        return None
+    out = []
+    for side in (solid, open_):
+        sel = side | (fill == -1)
+        if sel.sum() < 12 or (xs[sel].max() - xs[sel].min()) < 0.3 * W:
+            return None
+        out.append((xs[sel], ys[sel]))
+    return out
+
+
+def _split_branches(xs, ys, sym: float, fr, min_frac: float = 0.25):
+    """Separate a hysteresis loop into its upper and lower arm, or None if it is not one.
+
+    A loop is open where its two arms differ: those columns hold two groups of symbols
+    with clear air between them. Where it is closed the arms coincide and both take the
+    same point, which is what the physical curves do at the ends of the loop.
+
+    The test is deliberately hard to pass. Any thick or noisy series has *some* columns
+    that momentarily look two-valued, so a loop has to be two-valued over a sustained,
+    contiguous stretch of the axis -- an isolated scatter of split columns is a series
+    with texture, not two curves.
+    """
+    H, W = max(fr.height, 1), max(fr.width, 1)
+    sep = max(1.5 * sym, 0.03 * H)
+    slices = _column_slices(xs)
+    if not slices:
+        return None
+    ux, uy, lx, ly = [], [], [], []
+    split_at = []
+    for a, b in slices:
+        cy = np.sort(ys[a:b])
+        runs = group_consecutive(np.round(cy).astype(int), gap=int(max(2, sym)))
+        top, bot = runs[0], runs[-1]
+        ux.append(xs[a])
+        uy.append((top[0] + top[1]) / 2.0)
+        lx.append(xs[a])
+        ly.append((bot[0] + bot[1]) / 2.0)
+        if (bot[0] - top[1]) >= sep:
+            split_at.append(xs[a])
+    if len(split_at) < min_frac * len(slices):
+        return None
+    # the open part of a loop is one stretch of the axis, not scattered columns
+    span = max(split_at) - min(split_at)
+    if span < 0.25 * W or (max(ux) - min(ux)) < 0.3 * W:
+        return None
+    # and the two arms have to be apart on average, not only where the series happened
+    # to break: a single thick or gappy series also yields a "top" and a "bottom" run,
+    # but they are the same curve and sit on top of each other almost everywhere.
+    if float(np.mean(np.abs(np.asarray(uy) - np.asarray(ly)))) < 0.04 * H:
+        return None
+    return ((np.asarray(ux, float), np.asarray(uy, float)),
+            (np.asarray(lx, float), np.asarray(ly, float)))
+
+
+def _column_slices(xs):
+    """(start, stop) index pairs of each distinct x in a cloud sorted by x."""
+    if len(xs) == 0:
+        return []
+    edges = np.flatnonzero(np.diff(xs) > 0.5) + 1
+    starts = np.concatenate(([0], edges))
+    stops = np.concatenate((edges, [len(xs)]))
+    return list(zip(starts, stops))
+
+
+def _is_branch(first, second, fr) -> bool:
+    """Is this second chain the other arm of the same curve, or a different object?
+
+    A desorption branch runs back across the pressures the adsorption branch covered, so
+    it overlaps it in x. An inset, or a neighbour clipped in by the crop, sits off to one
+    side. Overlap in x is what separates the two.
+    """
+    ax, _ = first
+    bx, _ = second
+    lo, hi = max(ax.min(), bx.min()), min(ax.max(), bx.max())
+    if hi <= lo:
+        return False
+    return (hi - lo) >= 0.6 * (bx.max() - bx.min()) and (bx.max() - bx.min()) >= 0.3 * fr.width
 
 
 def branch_traces(mask, labimg, cluster: int, fr, min_frac: float = 0.15):
@@ -655,8 +995,19 @@ def scatter_series(mask, labimg, cluster: int, fr, min_points: int = 8):
 
 
 def extract_curves(rgb, mask, fr, labimg, clusters, max_per_cluster: int = 8,
-                   min_coverage: float = 0.25, verbose=False,
-                   bg_color=None) -> list[Curve]:
+                   min_coverage: float = 0.15, verbose=False,
+                   bg_color=None, style_hint: str | None = None) -> list[Curve]:
+    """`style_hint` says how the panel is drawn -- "lines", "markers",
+    "markers_joined_by_lines" or "mixed" -- and picks the tracer.
+
+    The two cases need different algorithms and no amount of pixel statistics decides
+    between them reliably: a series of symbols packed tightly enough looks like a stroke,
+    and a stroke chopped by overlapping curves looks like symbols. But it is obvious at a
+    glance, and a glance is what the classifier already gives -- it is looking at this
+    panel anyway, and "how is this drawn" is a question about appearance, which is the
+    kind vision models answer well. So it is asked there and dispatched here, instead of
+    being guessed at from component-size histograms.
+    """
     if not clusters:
         return []
     nodes, segments, sedge, seg_of = build_graph(mask)
@@ -666,32 +1017,32 @@ def extract_curves(rgb, mask, fr, labimg, clusters, max_per_cluster: int = 8,
     out: list[Curve] = []
 
     for c in clusters:
-        sc = scatter_series(mask, labimg, c.idx, fr)
-        if sc is None:
-            sc_cols = column_trace(mask, labimg, c.idx, fr)
-        else:
-            sc_cols = None
-        if sc is not None:
-            # A symbol-drawn series that occupies two separated runs per column is a
-            # hysteresis loop: adsorption and desorption over the same pressures. Split
-            # it here, where we already know the series is symbols and stroke tracing
-            # was never going to work.
-            br = branch_traces(mask, labimg, c.idx, fr)
-            if br is not None:
-                (ux, uy), (lx, ly), bsize, bmask = br
-                for xs_, ys_ in ((ux, uy), (lx, ly)):
-                    out.append(Curve(xs=xs_, ys=ys_, cluster=c.idx, rgb=c.rgb,
-                                     linewidth=max(bsize, 2.0), reward=float(len(xs_)),
-                                     coverage=len(xs_) / Wp, seg_ids=[], mask=bmask,
-                                     style="markers", marker_px=bsize))
-                continue
-            xs, ys, size, m = sc
-            out.append(Curve(xs=np.asarray(xs, float), ys=np.asarray(ys, float),
-                             cluster=c.idx, rgb=c.rgb, linewidth=max(size, 2.0),
-                             reward=float(len(xs)), coverage=(xs.max() - xs.min())
-                             / max(fr.width, 1), seg_ids=[], mask=m,
-                             style="markers", marker_px=size))
+        # Two tracers, and the classifier has already said which case this is.
+        #
+        # The point tracer is the general one: it reduces a series to points -- one per
+        # symbol, or one per column where ink is continuous -- and chains them by
+        # continuity, so it handles strokes as well as symbols. The connectivity graph is
+        # the specialist: it is better where curves cross and have to be told apart by
+        # what connects to what, and it is useless where there is nothing to connect.
+        #
+        #   markers -> point tracer alone. There are no strokes, and letting the graph
+        #              try anyway consumes segments other colours then cannot use.
+        #   lines / joined / mixed -> both run and the one covering more axis is kept.
+        #
+        # What the hint settles in every case is the *population* question -- whether a
+        # scatter of small components is a symbol series or crumbs along a stroke -- and
+        # how the series is labelled and re-plotted for verification.
+        ch = chain_traces(mask, labimg, c.idx, fr,
+                          require_population=style_hint != "markers")
+        if ch is not None and style_hint == "markers":
+            _emit_chains(out, ch, c, Wp, "markers")
             continue
+        # The column tracer is the last resort for a symbol series the point tracer
+        # could not read. On a panel classified as lines there is no symbol series for it
+        # to rescue, and what it produces instead is the average of whatever shares each
+        # column -- exactly the failure the point tracer was written to replace.
+        sc_cols = (column_trace(mask, labimg, c.idx, fr)
+                   if ch is None and style_hint != "lines" else None)
         cl_total = c.n_pixels
         lw = 2.0
         before = len(out)
@@ -728,10 +1079,15 @@ def extract_curves(rgb, mask, fr, labimg, clusters, max_per_cluster: int = 8,
             if remaining < 0.18 * cl_total:
                 break
 
-        # Stroke tracing can only fail two ways on a symbol-drawn series: it returns
-        # nothing, or it returns short fragments. Both are visible as poor coverage, so
-        # the cloud tracer is tried whenever the graph did badly and kept if it does
-        # better — no need to classify the drawing style up front.
+        if ch is not None:
+            chains, _, _, iso = ch
+            best = max((o.coverage for o in out[before:]), default=0.0)
+            cbest = max(((cx.max() - cx.min()) / Wp for cx, _ in chains), default=0.0)
+            if chains and (cbest > best or (len(chains) == 2 and best < 0.6)):
+                del out[before:]
+                _emit_chains(out, ch, c, Wp, "markers" if (
+                    style_hint not in ("lines", "markers_joined_by_lines")
+                    and iso >= 0.20) else "line")
         if sc_cols is not None:
             best = max((o.coverage for o in out[before:]), default=0.0)
             cx, cy, csize, cmask = sc_cols
@@ -757,16 +1113,17 @@ def extract_curves(rgb, mask, fr, labimg, clusters, max_per_cluster: int = 8,
                                  linewidth=max(csize, 2.0), reward=float(len(cx)),
                                  coverage=ccov, seg_ids=[], mask=cmask,
                                  style="markers", marker_px=csize))
-    # A symbol series has ink only where a symbol sits, so counting filled columns
-    # measures how the authors drew it, not how completely it was read. What makes such
-    # a series complete is spanning its axis, so report span for markers. (The decisions
-    # above still compare column counts, which is the right basis for choosing between
-    # two candidate tracings of the same pixels.)
-    for c in out:
-        if getattr(c, "style", "line") == "markers" and len(c.xs):
-            c.coverage = float(np.max(c.xs) - np.min(c.xs)) / max(fr.width, 1)
     _relabel(out, rgb, labimg, len(clusters), mask, bg_color)
-    return _dedupe(out, fr, bg_color)
+    out = _dedupe(out, fr, bg_color)
+    # Span, not filled-column count, for anything that came out of the point tracer: a
+    # symbol series has ink only where a symbol sits, so counting filled columns measures
+    # how the authors drew it rather than how completely it was read. Done here, once, on
+    # the traces that actually survive, so the number always matches the curve it labels.
+    for c in out:
+        if (getattr(c, "chained", False)
+                or getattr(c, "style", "line") == "markers") and len(c.xs):
+            c.coverage = float(np.max(c.xs) - np.min(c.xs)) / max(fr.width, 1)
+    return out
 
 
 def extend_traces(curves, labimg, fr, shape, text_cols=None, max_rise: float = 0.6):
@@ -785,7 +1142,7 @@ def extend_traces(curves, labimg, fr, shape, text_cols=None, max_rise: float = 0
     Hp = max(fr.height, 1)
     text_cols = text_cols if text_cols is not None else set()
     for c in curves:
-        if getattr(c, "style", "line") == "markers":
+        if getattr(c, "chained", False):
             continue                     # symbols are already the data points
         own = (labimg == c.cluster)
         for direction in (-1, 1):
@@ -905,7 +1262,7 @@ def refine_centerlines(curves, labimg, fr, shape, tall: float = 1.6):
     """
     x0, x1, y0, y1 = fr.interior(shape)
     for c in curves:
-        if getattr(c, "style", "line") == "markers":
+        if getattr(c, "chained", False):
             continue                     # a marker centroid is already the centre
         own = (labimg == c.cluster)
         lw = max(float(c.linewidth), 1.0)

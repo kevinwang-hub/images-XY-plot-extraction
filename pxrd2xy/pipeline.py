@@ -35,7 +35,8 @@ def source_ids(path: str) -> tuple[str, str]:
 
 def digitize(path: str, outdir: str, cache_dir: str | None = None,
              save_visuals: bool = True, verbose: bool = False,
-             rgb_in=None, name: str | None = None) -> dict:
+             rgb_in=None, name: str | None = None,
+             style_hint: str | None = None) -> dict:
     """`rgb_in` lets a caller pass an already-cropped panel instead of a file, so a
     figure panel extracted from a PDF can be digitised without a round trip to disk."""
     doi, figure_label = source_ids(path)
@@ -101,10 +102,21 @@ def digitize(path: str, outdir: str, cache_dir: str | None = None,
     pink = cv_mod.plot_ink(ink, fr, extras['x_ticks_detected'], extras['y_ticks_detected'])
     lw_guess = 2.0 * max(scale, 1.0)
     data_ink, removed = cv_mod.remove_text_and_legend(pink, ocr_items, fr, lw_guess)
+    # An inset is a second plot sharing the host's colours, so nothing downstream can
+    # tell its curves from the host's -- but it is the same *colours*, so it must be
+    # taken out after the colours are decided, not before. Clustering on the smaller
+    # image redraws the cluster boundaries and can lose a curve the inset was helping
+    # to define.
+    insets = ax.inset_regions(pink, fr)
     labimg, clusters = cv_mod.decompose_colors(rgb, data_ink, bg)
+    for ix0, ix1, iy0, iy1 in insets:
+        data_ink[iy0:iy1 + 1, ix0:ix1 + 1] = False
+        labimg[iy0:iy1 + 1, ix0:ix1 + 1] = -1
+    if insets:
+        rec["warnings"].append(f"excluded {len(insets)} inset region(s)")
     rec["colors"] = [dict(rgb=[int(v) for v in c.rgb], n_pixels=c.n_pixels) for c in clusters]
     curves = cv_mod.extract_curves(rgb, data_ink, fr, labimg, clusters, verbose=verbose,
-                                   bg_color=bg)
+                                   bg_color=bg, style_hint=style_hint)
     if not curves:
         rec["warnings"].append("no curve extracted")
         return rec

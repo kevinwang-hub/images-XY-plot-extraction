@@ -92,9 +92,16 @@ class Frame:
         return max(0, x0), min(W - 1, x1), max(0, y0), min(H - 1, y1)
 
 
-def _is_axis_line(ink: np.ndarray, band: tuple, vertical: bool) -> bool:
+def _is_axis_line(ink: np.ndarray, band: tuple, vertical: bool,
+                  min_frac: float = 0.35) -> bool:
     """Reject look-alikes: an axis line is solid and of constant thickness, whereas a
-    tall XRD peak (also a long run) tapers from base to tip."""
+    tall XRD peak (also a long run) tapers from base to tip.
+
+    `min_frac` is how much of the image the line has to run across. An outer frame spans
+    most of it; an inset's own spine spans only its own corner of it, so callers looking
+    for insets pass a smaller bar. The solidity and uniformity tests are the same either
+    way -- they are what separates a drawn axis from a curve.
+    """
     a, b = band
     sub = ink[:, a:b + 1] if vertical else ink[a:b + 1, :]
     along = sub.any(axis=1 if vertical else 0)
@@ -104,7 +111,7 @@ def _is_axis_line(ink: np.ndarray, band: tuple, vertical: bool) -> bool:
     # tick label sharing the band shows up as a separate stretch and is ignored
     bands = group_consecutive(np.flatnonzero(along), gap=1)
     lo, hi = max(bands, key=lambda b: b[1] - b[0])
-    if (hi - lo + 1) < 0.35 * len(along):
+    if (hi - lo + 1) < min_frac * len(along):
         return False
     width = (sub[lo:hi + 1] if vertical else sub[:, lo:hi + 1].T)
     w = width.sum(axis=1).astype(float)
@@ -438,3 +445,83 @@ def _axis_label_text(ocr_items, fr: Frame, H: int, W: int) -> tuple[str, str]:
     else:
         yl = ""
     return xl, yl
+
+def inset_regions(ink: np.ndarray, fr: Frame, min_frac: float = 0.03,
+                  max_frac: float = 0.45) -> list[tuple[int, int, int, int]]:
+    """Sub-plots drawn inside the plot area, as (x0, x1, y0, y1) boxes.
+
+    An inset is a second figure sharing the first one's pixels. Its curves are the same
+    colours as the host's, so every colour-based step downstream -- clustering, tracing,
+    legend matching -- treats them as part of the host series, and a trace can walk out
+    of the main plot and into the inset without anything looking wrong locally.
+
+    What gives an inset away is that it brings its own axes: a long vertical run of ink
+    meeting a long horizontal run, both well inside the host frame, enclosing a box far
+    too small to be the host's own. Data curves do not produce that pair -- a curve
+    steep enough to look like a vertical axis is not also flat somewhere else at exactly
+    the right place to close a corner.
+    """
+    import cv2
+
+    x0, x1, y0, y1 = fr.interior(ink.shape)
+    if x1 - x0 < 40 or y1 - y0 < 40:
+        return []
+    sub = ink[y0:y1 + 1, x0:x1 + 1]
+    h, w = sub.shape
+    pad = 3
+    vlen = max(int(0.22 * h), 12)
+    hlen = max(int(0.22 * w), 12)
+    vert = cv2.morphologyEx(sub.astype(np.uint8), cv2.MORPH_OPEN,
+                            cv2.getStructuringElement(cv2.MORPH_RECT, (1, vlen)))
+    horz = cv2.morphologyEx(sub.astype(np.uint8), cv2.MORPH_OPEN,
+                            cv2.getStructuringElement(cv2.MORPH_RECT, (hlen, 1)))
+    vcols = np.flatnonzero(vert.sum(axis=0) >= 0.20 * h)
+    hrows = np.flatnonzero(horz.sum(axis=1) >= 0.20 * w)
+    vcols = vcols[(vcols > pad) & (vcols < w - 1 - pad)]
+    hrows = hrows[(hrows > pad) & (hrows < h - 1 - pad)]
+    if vcols.size == 0 or hrows.size == 0:
+        return []
+    # the same solid, constant-thickness test the outer frame uses: a tall peak beside a
+    # flat baseline also makes a corner, and mistaking one for an inset would delete a
+    # piece of the plot rather than merely add a spurious curve
+    out = []
+    for vb in group_consecutive(vcols, gap=3):
+        if not _is_axis_line(sub.astype(bool), vb, True, 0.20):
+            continue
+        cx = (vb[0] + vb[1]) // 2
+        vrows = np.flatnonzero(vert[:, vb[0]:vb[1] + 1].any(axis=1))
+        if vrows.size == 0:
+            continue
+        vy0, vy1 = int(vrows.min()), int(vrows.max())
+        for hb in group_consecutive(hrows, gap=3):
+            if not _is_axis_line(sub.astype(bool), hb, False, 0.20):
+                continue
+            cy = (hb[0] + hb[1]) // 2
+            hcols = np.flatnonzero(horz[hb[0]:hb[1] + 1, :].any(axis=0))
+            if hcols.size == 0:
+                continue
+            hx0, hx1 = int(hcols.min()), int(hcols.max())
+            # the two lines must actually meet: each has to reach the other's position
+            tol = max(4, int(0.03 * min(w, h)))
+            if not (hx0 - tol <= cx <= hx1 + tol and vy0 - tol <= cy <= vy1 + tol):
+                continue
+            # the box an L encloses is the bounding box of the L itself
+            bx0, bx1 = min(cx, hx0), max(cx, hx1)
+            by0, by1 = min(cy, vy0), max(cy, vy1)
+            area = (bx1 - bx0) * (by1 - by0)
+            if not (min_frac * w * h <= area <= max_frac * w * h):
+                continue
+            if (bx1 - bx0) < 0.12 * w or (by1 - by0) < 0.12 * h:
+                continue
+            out.append((x0 + bx0, x0 + bx1, y0 + by0, y0 + by1))
+    if not out:
+        return []
+    out.sort(key=lambda b: -(b[1] - b[0]) * (b[3] - b[2]))
+    kept: list[tuple[int, int, int, int]] = []
+    for b in out:                                     # the same box found via two sides
+        if any(max(b[0], k[0]) < min(b[1], k[1]) and max(b[2], k[2]) < min(b[3], k[3])
+               for k in kept):
+            continue
+        kept.append(b)
+    return kept[:2]
+

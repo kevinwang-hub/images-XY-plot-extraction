@@ -34,6 +34,10 @@ PLOT_TYPES = [
 NON_PLOT = ["crystal_structure", "molecular_diagram", "photograph", "scheme",
             "table", "bar_chart", "not_a_plot"]
 
+# How the data is *drawn*. This decides which tracer runs, and it is a question about
+# appearance, which is what a vision model is reliable for -- unlike anything positional.
+RENDER_STYLES = ["lines", "markers", "markers_joined_by_lines", "mixed"]
+
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -46,6 +50,7 @@ SCHEMA = {
                     "category": {"type": "string", "enum": PLOT_TYPES + NON_PLOT},
                     "digitizable": {"type": "boolean"},
                     "n_curves": {"type": "integer"},
+                    "render_style": {"type": "string", "enum": RENDER_STYLES},
                     "x_quantity": {"type": "string"},
                     "y_quantity": {"type": "string"},
                     "series_labels": {"type": "array", "items": {"type": "string"}},
@@ -86,6 +91,17 @@ including bare codes like "1a" or "as-synthesized". Empty list if none are shown
 
 `n_curves` — how many distinct data curves or series you can see.
 
+`render_style` — how the data is drawn, which decides how it gets traced. Look closely:
+  • `lines` — continuous strokes with no individual point symbols. Diffractograms, TGA
+    traces and most spectra are drawn this way.
+  • `markers` — discrete symbols (filled or open circles, squares, triangles, diamonds)
+    with no line through them. Common for isotherms and magnetic data.
+  • `markers_joined_by_lines` — symbols *and* a line connecting them. If you can see both,
+    choose this rather than guessing which dominates.
+  • `mixed` — different series in the same panel are drawn differently, e.g. an
+    experimental scatter with a fitted line through it.
+Judge by what the ink looks like, not by what the plot type usually is.
+
 Answer for every panel you are given, keyed by the id printed before each image."""
 
 
@@ -109,7 +125,7 @@ def classify(items: list[dict], client=None, batch: int = 5,
         imgs = [_b64(it["rgb"]) for it in chunk]
         # sha1, not hash(): Python randomises string hashing per process, so hash()
         # would silently miss the cache on every new run
-        ck = llmcache.key("classify2", model, [it["id"] for it in chunk],
+        ck = llmcache.key("classify3", model, [it["id"] for it in chunk],
                           [hashlib.sha1(b.encode()).hexdigest() for b in imgs],
                           [(it.get("caption") or "")[:700] for it in chunk])
         hit = llmcache.get(ck)

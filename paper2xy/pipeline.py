@@ -111,11 +111,12 @@ def process_paper(pdf_path: str, outdir: str, client=None, dpi: int = 300,
                      category=c.get("category"), panel_letter=c.get("panel_letter", ""),
                      x_quantity=c.get("x_quantity", ""), y_quantity=c.get("y_quantity", ""),
                      n_curves_seen=c.get("n_curves", 0),
+                     render_style=c.get("render_style", ""),
                      series_labels=c.get("series_labels", []),
                      caption=f.caption[:800], curves=[])
         try:
             d = digitize(m["path"], visdir, os.path.join(outdir, ".ocrcache"),
-                         rgb_in=it["rgb"],
+                         rgb_in=it["rgb"], style_hint=c.get("render_style"),
                          name=f"{re.sub(r'[^A-Za-z0-9]+', '_', paper_id)}__{pid}")
         except Exception as exc:
             entry["error"] = repr(exc)
