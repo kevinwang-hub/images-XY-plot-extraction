@@ -34,20 +34,24 @@ def source_ids(path: str) -> tuple[str, str]:
 
 
 def digitize(path: str, outdir: str, cache_dir: str | None = None,
-             save_visuals: bool = True, verbose: bool = False) -> dict:
+             save_visuals: bool = True, verbose: bool = False,
+             rgb_in=None, name: str | None = None) -> dict:
+    """`rgb_in` lets a caller pass an already-cropped panel instead of a file, so a
+    figure panel extracted from a PDF can be digitised without a round trip to disk."""
     doi, figure_label = source_ids(path)
-    name = os.path.splitext(os.path.basename(path))[0]
+    name = name or os.path.splitext(os.path.basename(path))[0]
     rec: dict = dict(source_file=path, name=name, doi=doi, figure_label=figure_label,
                      ok=False, curves=[], warnings=[])
 
-    rgb0 = load_rgb(path)
+    rgb0 = load_rgb(path) if rgb_in is None else rgb_in
     rgb, scale = upscale_if_small(rgb0)
     rec["image_size"] = [int(rgb0.shape[1]), int(rgb0.shape[0])]
     rec["work_scale"] = scale
 
     bg = background_color(rgb)
     ink = ink_mask(rgb, bg, thresh=40)
-    cache = os.path.join(cache_dir, name + ".ocr.json") if cache_dir else None
+    cache = (os.path.join(cache_dir, re.sub(r"[^A-Za-z0-9._-]+", "_", name) + ".ocr.json")
+             if cache_dir else None)
     ocr_items = ax.run_ocr(rgb, cache)
     fr = ax.detect_frame(ink, ocr_items)
     rec["frame"] = dict(left=fr.left, right=fr.right, top=fr.top, bottom=fr.bottom,
@@ -137,7 +141,7 @@ def digitize(path: str, outdir: str, cache_dir: str | None = None,
             pix = vf.verify_curve(c, data_ink, labimg, c.mask, fr)
             rt = vf.roundtrip_metrics(sm[k], c.mask, labimg == c.cluster, data_ink, fr,
                                       c.linewidth)
-            out.append(vf.combine_metrics(pix, rt))
+            out.append(vf.combine_metrics(pix, rt, getattr(c, "style", "line")))
         return out
 
     mode = os.environ.get("PXRD_CENTERLINE", "auto")
@@ -173,6 +177,7 @@ def digitize(path: str, outdir: str, cache_dir: str | None = None,
             legend_color_de=getattr(c, "legend_color_de", None),
             color=[int(v) for v in c.rgb], linewidth=float(c.linewidth / scale),
             reward=c.reward, status=st, status_reason=vf.status_reason(m), quality=m,
+            style=getattr(c, "style", "line"),
             x=[float(v) for v in xd], y=[float(v) for v in yd],
             px=[float(v / scale) for v in c.xs], py=[float(v / scale) for v in c.ys],
         ))

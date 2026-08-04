@@ -483,6 +483,8 @@ class Curve:
     legend_source: str = ""
     n_added_left: int = 0
     n_added_right: int = 0
+    style: str = "line"          # "line" or "markers"
+    marker_px: float = 0.0
 
 
 def _trace_from_path(segments, path, lw: float, W: int):
@@ -531,6 +533,127 @@ def _linewidth(segments, path, labimg, cluster) -> float:
     return float(max(1.0, round(lw)))
 
 
+def branch_traces(mask, labimg, cluster: int, fr, min_frac: float = 0.15):
+    """Split one colour into an upper and a lower branch.
+
+    An adsorption isotherm is not a function: the desorption branch runs back across the
+    same pressures at a different uptake, so a single y(x) either skips those columns as
+    ambiguous or zig-zags between the two. But the loop is two functions, and in the
+    columns where both are present they are two clearly separated runs of the same
+    colour. Taking the upper run for one series and the lower for the other recovers
+    both, and where the loop is closed the two runs coincide — which is exactly what the
+    physical curves do at the ends of the loop.
+    """
+    own = (labimg == cluster) & mask
+    x0, x1, y0, y1 = fr.interior(mask.shape)
+    Hp = max(fr.height, 1)
+    cols, two = [], 0
+    for x in range(x0, x1 + 1):
+        rows = np.flatnonzero(own[:, x])
+        if rows.size == 0:
+            continue
+        runs = group_consecutive(rows, gap=2)
+        runs = [r for r in runs if (r[1] - r[0]) < 0.5 * Hp]
+        if not runs:
+            continue
+        big = [r for r in runs if (r[1] - r[0] + 1) >= 1]
+        sep = [r for r in big]
+        cols.append((x, sep))
+        if len(sep) >= 2 and (sep[-1][0] - sep[0][1]) > 0.04 * Hp:
+            two += 1
+    if not cols or two < min_frac * len(cols):
+        return None
+    up_x, up_y, lo_x, lo_y, sizes = [], [], [], [], []
+    for x, runs in cols:
+        a, b = runs[0]
+        up_x.append(x)
+        up_y.append((a + b) / 2.0)
+        a2, b2 = runs[-1]
+        lo_x.append(x)
+        lo_y.append((a2 + b2) / 2.0)
+        sizes.append(b - a + 1)
+    span = max(up_x) - min(up_x)
+    if span < 0.25 * fr.width:
+        return None
+    return ((np.asarray(up_x, float), np.asarray(up_y, float)),
+            (np.asarray(lo_x, float), np.asarray(lo_y, float)),
+            float(np.median(sizes)), own)
+
+
+def column_trace(mask, labimg, cluster: int, fr, max_spread: float = 0.5):
+    """Trace a series by the vertical centre of its own-colour ink, column by column.
+
+    Symbol-drawn series (isotherms, magnetic data) defeat stroke tracing: each symbol is
+    its own component, and where symbols crowd together they fuse into one blob, so the
+    connectivity graph sees either confetti or a single lump. Neither needs solving —
+    the series is still single-valued in x, so the centre of its ink in each column is
+    the value. Columns where the ink spans most of the plot are skipped as ambiguous.
+    """
+    own = (labimg == cluster) & mask
+    x0, x1, y0, y1 = fr.interior(mask.shape)
+    xs, ys, sizes = [], [], []
+    for x in range(x0, x1 + 1):
+        rows = np.flatnonzero(own[:, x])
+        if rows.size == 0:
+            continue
+        if (rows.max() - rows.min()) > max_spread * max(fr.height, 1):
+            continue
+        runs = group_consecutive(rows, gap=2)
+        a, b = max(runs, key=lambda r: r[1] - r[0])
+        xs.append(x)
+        ys.append((a + b) / 2.0)
+        sizes.append(b - a + 1)
+    if len(xs) < 12:
+        return None
+    xs = np.asarray(xs, float)
+    if (xs.max() - xs.min()) < 0.25 * fr.width:
+        return None
+    return xs, np.asarray(ys, float), float(np.median(sizes)), own
+
+
+def scatter_series(mask, labimg, cluster: int, fr, min_points: int = 8):
+    """A series drawn as separate markers rather than a continuous stroke.
+
+    Isotherms, magnetic data and most property-vs-property plots are drawn as symbols.
+    A stroke-tracing engine sees each symbol as its own fragment and returns a handful of
+    disconnected stubs. Markers are easy to recognise instead — many small blobs of
+    similar size, none of them long — and their centroids *are* the data points, so no
+    tracing is needed at all.
+    """
+    own = (labimg == cluster) & mask
+    n, lab, stats, cent = cv2.connectedComponentsWithStats(own.astype(np.uint8), 8)
+    if n <= min_points:
+        return None
+    areas = stats[1:, cv2.CC_STAT_AREA].astype(float)
+    ws = stats[1:, cv2.CC_STAT_WIDTH].astype(float)
+    hs = stats[1:, cv2.CC_STAT_HEIGHT].astype(float)
+    total = float(areas.sum())
+    if total <= 0:
+        return None
+    med_a = float(np.median(areas))
+    keep = ((areas >= 0.25 * med_a) & (areas <= 4.0 * med_a)
+            & (ws <= 0.12 * max(fr.width, 1)) & (hs <= 0.12 * max(fr.height, 1)))
+    if keep.sum() < min_points:
+        return None
+    # a dominant long component means this is a stroke with debris, not a marker series
+    if areas.max() > 0.25 * total or ws.max() > 0.35 * fr.width:
+        return None
+    if keep.sum() < 0.55 * len(areas):
+        return None
+    pts = np.array([(cent[i + 1][0], cent[i + 1][1]) for i in range(len(areas)) if keep[i]])
+    order = np.argsort(pts[:, 0])
+    xs, ys = pts[order, 0], pts[order, 1]
+    span = xs.max() - xs.min()
+    if span < 0.25 * fr.width:
+        return None
+    size = float(np.median(np.sqrt(areas[keep])))
+    m = np.zeros(mask.shape, bool)
+    for i in range(len(areas)):
+        if keep[i]:
+            m |= (lab == i + 1)
+    return xs, ys, size, m
+
+
 def extract_curves(rgb, mask, fr, labimg, clusters, max_per_cluster: int = 8,
                    min_coverage: float = 0.25, verbose=False,
                    bg_color=None) -> list[Curve]:
@@ -543,8 +666,35 @@ def extract_curves(rgb, mask, fr, labimg, clusters, max_per_cluster: int = 8,
     out: list[Curve] = []
 
     for c in clusters:
+        sc = scatter_series(mask, labimg, c.idx, fr)
+        if sc is None:
+            sc_cols = column_trace(mask, labimg, c.idx, fr)
+        else:
+            sc_cols = None
+        if sc is not None:
+            # A symbol-drawn series that occupies two separated runs per column is a
+            # hysteresis loop: adsorption and desorption over the same pressures. Split
+            # it here, where we already know the series is symbols and stroke tracing
+            # was never going to work.
+            br = branch_traces(mask, labimg, c.idx, fr)
+            if br is not None:
+                (ux, uy), (lx, ly), bsize, bmask = br
+                for xs_, ys_ in ((ux, uy), (lx, ly)):
+                    out.append(Curve(xs=xs_, ys=ys_, cluster=c.idx, rgb=c.rgb,
+                                     linewidth=max(bsize, 2.0), reward=float(len(xs_)),
+                                     coverage=len(xs_) / Wp, seg_ids=[], mask=bmask,
+                                     style="markers", marker_px=bsize))
+                continue
+            xs, ys, size, m = sc
+            out.append(Curve(xs=np.asarray(xs, float), ys=np.asarray(ys, float),
+                             cluster=c.idx, rgb=c.rgb, linewidth=max(size, 2.0),
+                             reward=float(len(xs)), coverage=(xs.max() - xs.min())
+                             / max(fr.width, 1), seg_ids=[], mask=m,
+                             style="markers", marker_px=size))
+            continue
         cl_total = c.n_pixels
         lw = 2.0
+        before = len(out)
         for it in range(max_per_cluster):
             path, reward = best_path(segments, sedge, c.idx, lw, Wp, used,
                                      Hp=max(fr.height, 1))
@@ -577,6 +727,44 @@ def extract_curves(rgb, mask, fr, labimg, clusters, max_per_cluster: int = 8,
                 if segments[s].counts[c.idx] > 0)
             if remaining < 0.18 * cl_total:
                 break
+
+        # Stroke tracing can only fail two ways on a symbol-drawn series: it returns
+        # nothing, or it returns short fragments. Both are visible as poor coverage, so
+        # the cloud tracer is tried whenever the graph did badly and kept if it does
+        # better — no need to classify the drawing style up front.
+        if sc_cols is not None:
+            best = max((o.coverage for o in out[before:]), default=0.0)
+            cx, cy, csize, cmask = sc_cols
+            ccov = len(cx) / Wp
+            br = branch_traces(mask, labimg, c.idx, fr)
+            # Branches span the same columns as the single trace, so they can never win
+            # on coverage — but where they exist they carry both curves instead of one,
+            # which is strictly more of the figure's data.
+            # Prefer branches only where stroke tracing already struggled: a stack of
+            # three same-coloured curves is better served by the DP's repeated passes,
+            # while a hysteresis loop defeats them entirely.
+            if br is not None and best < 0.6:
+                (ux, uy), (lx, ly), bsize, bmask = br
+                del out[before:]
+                for xs_, ys_ in ((ux, uy), (lx, ly)):
+                    out.append(Curve(xs=xs_, ys=ys_, cluster=c.idx, rgb=c.rgb,
+                                     linewidth=max(bsize, 2.0), reward=float(len(xs_)),
+                                     coverage=len(xs_) / Wp, seg_ids=[], mask=bmask,
+                                     style="markers", marker_px=bsize))
+            elif ccov > max(best, 0.5) or (best < 0.5 and ccov > best):
+                del out[before:]
+                out.append(Curve(xs=cx, ys=cy, cluster=c.idx, rgb=c.rgb,
+                                 linewidth=max(csize, 2.0), reward=float(len(cx)),
+                                 coverage=ccov, seg_ids=[], mask=cmask,
+                                 style="markers", marker_px=csize))
+    # A symbol series has ink only where a symbol sits, so counting filled columns
+    # measures how the authors drew it, not how completely it was read. What makes such
+    # a series complete is spanning its axis, so report span for markers. (The decisions
+    # above still compare column counts, which is the right basis for choosing between
+    # two candidate tracings of the same pixels.)
+    for c in out:
+        if getattr(c, "style", "line") == "markers" and len(c.xs):
+            c.coverage = float(np.max(c.xs) - np.min(c.xs)) / max(fr.width, 1)
     _relabel(out, rgb, labimg, len(clusters), mask, bg_color)
     return _dedupe(out, fr, bg_color)
 
@@ -597,6 +785,8 @@ def extend_traces(curves, labimg, fr, shape, text_cols=None, max_rise: float = 0
     Hp = max(fr.height, 1)
     text_cols = text_cols if text_cols is not None else set()
     for c in curves:
+        if getattr(c, "style", "line") == "markers":
+            continue                     # symbols are already the data points
         own = (labimg == c.cluster)
         for direction in (-1, 1):
             xs, ys = list(c.xs), list(c.ys)
@@ -715,6 +905,8 @@ def refine_centerlines(curves, labimg, fr, shape, tall: float = 1.6):
     """
     x0, x1, y0, y1 = fr.interior(shape)
     for c in curves:
+        if getattr(c, "style", "line") == "markers":
+            continue                     # a marker centroid is already the centre
         own = (labimg == c.cluster)
         lw = max(float(c.linewidth), 1.0)
         xs = np.asarray(c.xs, int)
@@ -887,7 +1079,8 @@ def _dedupe(curves: list[Curve], fr, bg_color=None) -> list[Curve]:
         dup = False
         for k in keep:
             lo, hi = max(c.xs.min(), k.xs.min()), min(c.xs.max(), k.xs.max())
-            if hi - lo < 0.3 * fr.width:
+            shortest = min(c.xs.max() - c.xs.min(), k.xs.max() - k.xs.min())
+            if hi - lo < min(0.3 * fr.width, 0.8 * max(shortest, 1)):
                 continue
             xi = np.arange(lo, hi + 1)
             d = np.abs(np.interp(xi, c.xs, c.ys) - np.interp(xi, k.xs, k.ys))

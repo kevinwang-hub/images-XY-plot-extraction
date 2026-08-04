@@ -131,8 +131,14 @@ def roundtrip_render(curves, fr, xcal, ycal, shape, dpi: int = 100):
         axp.set_xlim(xlo, xhi)
         axp.set_ylim(ylo, yhi)
         axp.axis("off")
-        axp.plot(c.data_x, c.data_y, lw=max(c.linewidth, 1.0) * 72.0 / dpi, color="k",
-                 solid_capstyle="projecting", solid_joinstyle="miter", antialiased=True)
+        if getattr(c, "style", "line") == "markers":
+            axp.plot(c.data_x, c.data_y, linestyle="none", marker="o", color="k",
+                     markersize=max(getattr(c, "marker_px", 4.0), 2.0) * 72.0 / dpi,
+                     markeredgewidth=0, antialiased=True)
+        else:
+            axp.plot(c.data_x, c.data_y, lw=max(c.linewidth, 1.0) * 72.0 / dpi, color="k",
+                     solid_capstyle="projecting", solid_joinstyle="miter",
+                     antialiased=True)
         canvas = FigureCanvasAgg(fig)
         canvas.draw()
         buf = np.asarray(canvas.buffer_rgba())[:, :, :3]
@@ -232,10 +238,11 @@ def verify_curve(curve, plot_ink: np.ndarray, labimg: np.ndarray, assigned: np.n
                 n_points=int(len(curve.xs)))
 
 
-def combine_metrics(pix: dict, rt: dict) -> dict:
+def combine_metrics(pix: dict, rt: dict, style: str = "line") -> dict:
     """Merge the pixel-level checks with the round-trip overlap into one score."""
     m = dict(pix)
     m.update(rt)
+    m["style"] = style
     m["overlap_score"] = float(
         0.25 * m["point_on_ink"] + 0.15 * m["colour_match"] + 0.20 * m["on_ink"]
         + 0.15 * min(m["overlap_iou"] / 0.85, 1.0)
@@ -252,10 +259,17 @@ def curve_status(m: dict) -> str:
     Area IoU is reported but only carries a weak floor: where the pen fills a whole peak
     column, the overlap of a line with that filled area is limited by pen geometry rather
     than by digitisation error, so gating on it would penalise spike-dense figures for
-    being spike-dense."""
+    being spike-dense.
+
+    For a symbol-drawn series the floor is dropped entirely. The round trip re-plots every
+    series as circles, so a correctly read series of triangles or open squares is bounded
+    by the overlap of a circle with a triangle no matter how exact the coordinates are --
+    that number measures the symbol shape, not the reading. What still has to hold for
+    symbols is the part that does mean something: every point on its own ink."""
+    iou_floor = 0.0 if m.get("style") == "markers" else 0.45
     if (m["point_on_ink"] >= 0.97 and m["colour_match"] >= 0.95 and m["on_ink"] >= 0.65
             and m["mean_dev_pct"] <= 1.0 and m["p99_dev_pct"] <= 3.0
-            and m["coverage"] >= 0.85 and m["overlap_iou"] >= 0.45):
+            and m["coverage"] >= 0.85 and m["overlap_iou"] >= iou_floor):
         return "pass"
     if (m["point_on_ink"] >= 0.88 and m["on_ink"] >= 0.50
             and m["mean_dev_pct"] <= 2.5 and m["coverage"] >= 0.60):
@@ -278,6 +292,8 @@ def status_reason(m: dict) -> str:
     """Which pass gate(s) a curve missed, in plain words."""
     bad = []
     for key, thr, op, why in GATES:
+        if key == "overlap_iou" and m.get("style") == "markers":
+            continue
         v = m.get(key)
         if v is None:
             continue

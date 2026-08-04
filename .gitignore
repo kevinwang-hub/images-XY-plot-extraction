@@ -4,3 +4,6 @@ __pycache__/
 
 # OCR result cache — regenerated automatically on the first run
 .ocrcache/
+out_papers/figures/
+out_papers/figs/
+.llmcache/
