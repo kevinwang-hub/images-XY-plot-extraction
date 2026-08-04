@@ -3,6 +3,7 @@
 # technique: gas_adsorption_isotherm  material: X-pcu-3-Zn-3i
 # series: X-pcu-3-Zn-3i  (calculated)
 # x:    y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 299.00000,0.491505
 299.50000,0.491505

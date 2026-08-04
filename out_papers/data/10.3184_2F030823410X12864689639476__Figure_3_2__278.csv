@@ -1,8 +1,9 @@
 # paper: 10.3184%2F030823410X12864689639476
 # figure: Figure 3  panel: Figure_3_2
-# technique: photoluminescence  material: [CuCl2(pyridine-4-carbonitrile)2]n (complex 2, tentative)
-# series: [CuCl2(pyridine-4-carbonitrile)2]n — excitation spectrum  (experimental)
+# technique: photoluminescence  material: [CuCl2(pyridine-4-carbonitrile)2]n
+# series: [CuCl2(pyridine-4-carbonitrile)2]n (excitation)  (experimental)
 # x: (c)   y: data units from y ticks
+# read by: pixels
 x,y
 220.44612,4.924699
 220.94281,4.924699

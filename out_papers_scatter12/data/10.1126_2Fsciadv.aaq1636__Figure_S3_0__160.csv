@@ -1,0 +1,15 @@
+# paper: 10.1126%2Fsciadv.aaq1636
+# figure: Figure S3  panel: Figure_S3_0
+# technique: gas_adsorption_isotherm  material: X-pcu-3-Zn-3i
+# series: X-pcu-3-Zn-3i-γ  (experimental)
+# x: RelativePressure(p/p°)   y: arb. units, 0 = bottom axis, 1 = top of plot box
+x,y
+341.96847,0.542339
+665.70359,0.345364
+687.45289,0.249100
+707.62500,0.248907
+708.01887,0.345864
+811.19811,0.346100
+848.49558,0.927240
+877.96654,0.255130
+877.98416,0.352347

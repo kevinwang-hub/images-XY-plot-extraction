@@ -1,8 +1,9 @@
 # paper: 10.1039%2FC3CE41975D
 # figure: Figure 13  panel: Figure_13_0
-# technique: tga  material: 
+# technique: tga  material: SrII–MII (M = Cu, Co, Ni, Zn) coordination polymers of pyridine-2,5-dicarboxylic acid (complexes 1–8)
 # series: [CuSr(pydc)2(H2O)4]n  (experimental)
 # x: Temperature (deg)   y: data units from y ticks
+# read by: pixels
 x,y
 39.68254,100.272970
 41.26984,100.272970

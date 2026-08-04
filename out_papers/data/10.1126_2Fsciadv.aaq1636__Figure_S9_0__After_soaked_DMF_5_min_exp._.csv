@@ -1,8 +1,9 @@
 # paper: 10.1126%2Fsciadv.aaq1636
 # figure: Figure S9  panel: Figure_S9_0
 # technique: pxrd  material: X-pcu-3-Zn-3i
-# series: X-pcu-3-Zn-3i-γ soaked in DMF (converted to α)  (experimental)
+# series: X-pcu-3-Zn-3i-γ soaked in DMF (converts to α)  (experimental)
 # x: 2θ (theta)   y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 5.26163,0.701124
 5.29070,0.701685

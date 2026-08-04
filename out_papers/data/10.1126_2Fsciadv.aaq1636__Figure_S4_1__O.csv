@@ -3,6 +3,7 @@
 # technique: gas_adsorption_isotherm  material: X-pcu-3-Zn-3i-γ (shape-memory phase)
 # series: X-pcu-3-Zn-3i-γ (shape-memory phase)  (experimental)
 # x: Pressure (kPa)   y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 -1.25448,0.157666
 -1.25448,0.129791

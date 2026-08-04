@@ -3,6 +3,7 @@
 # technique: pxrd  material: X-pcu-3-Zn-3i
 # series: X-pcu-3-Zn-3i-α  (experimental)
 # x: 2θ (theta)   y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 5.06116,0.635494
 5.09174,0.634963

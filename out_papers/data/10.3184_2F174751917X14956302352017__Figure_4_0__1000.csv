@@ -3,6 +3,7 @@
 # technique: photoluminescence  material: 
 # series: H2BDC–Cl4 (tetrachloroterephthalic acid)  (reference)
 # x: Wavelength (nm)   y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 458.68033,0.796032
 458.77417,0.796032

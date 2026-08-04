@@ -108,6 +108,9 @@ re-plotted from scratch. Nothing is asserted that you cannot check by eye.</p></
 """
 
 EXTRA_CSS2 = """
+.chip{display:inline-block;margin-left:6px;padding:0 6px;border-radius:99px;font-size:10px;
+      font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+      background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
 .method table{margin-top:8px}
 .method td{vertical-align:top;font-size:12.5px;line-height:1.5}
 .method td:first-child{white-space:nowrap;font-weight:600;color:var(--tx)}
@@ -244,6 +247,12 @@ def build(recs: list, outdir: str, title: str = "Papers → xy data") -> str:
                 ("diff", "point check", "Green = point on ink, red = off, blue = unclaimed."),
                 ("roundtrip", "overlap map", "Re-plot vs original ink."),
                 ("replot", "re-plot", "Extracted data plotted back."),
+                # A scatter panel read by the model gets its claimed values drawn back
+                # onto the panel. There is deliberately no score attached: the values were
+                # not derived from pixels, so pixel agreement is not their test -- the eye
+                # is. That is what this view is for.
+                ("llm_overlay", "model points",
+                 "The model's claimed values, plotted back onto the panel."),
             ]:
                 fp = os.path.join(outdir, "figs", p.get(key) or "")
                 if p.get(key) and os.path.exists(fp):
@@ -257,7 +266,8 @@ def build(recs: list, outdir: str, title: str = "Papers → xy data") -> str:
                 for i, (l, v, c) in enumerate(views))
             rows = "".join(
                 f'<tr><td>{_sw(c.get("color", [90, 90, 90]))}'
-                f'{html.escape(c.get("legend") or "—")}</td>'
+                f'{html.escape(c.get("legend") or "—")}'
+                f'{" <span class=chip>model</span>" if c.get("method") == "llm" else ""}</td>'
                 f'<td><b>{html.escape(c.get("resolved_name") or "")}</b></td>'
                 f'<td>{html.escape(c.get("role") or "")}</td>'
                 f'<td>{html.escape(c.get("conditions") or "")}</td>'

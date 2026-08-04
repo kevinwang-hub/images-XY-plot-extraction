@@ -1,8 +1,9 @@
 # paper: 10.3184%2F174751917X14956302352017
 # figure: Figure 4  panel: Figure_4_0
 # technique: photoluminescence  material: 
-# series: Complex 2 (CuII CP obtained by recrystallisation of 1 from water, 1-D linear single chain)  (experimental)
+# series: complex 2 (water-soluble CuII CP obtained by recrystallisation from water, 1-D linear single chain)  (experimental)
 # x: Wavelength (nm)   y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 460.18179,0.008730
 460.27564,0.012698

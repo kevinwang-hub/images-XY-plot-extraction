@@ -1,8 +1,9 @@
 # paper: 10.1126%2Fsciadv.aaq1636
 # figure: Figure S15  panel: Figure_S15_0
 # technique: gas_adsorption_isotherm  material: X-pcu-3-Zn-3i (β and γ phases)
-# series: simulated CO2 isotherm, X-pcu-3-Zn-3i phase (model a3)  (simulated)
+# series: X-pcu-3-Zn-3i simulated isotherm, model a3  (simulated)
 # x: Pressure (atm)   y: data units from y ticks
+# read by: pixels
 x,y
 0.00359,1.451429
 0.00438,1.457143

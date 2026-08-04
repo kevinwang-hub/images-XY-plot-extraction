@@ -16,7 +16,67 @@ import argparse
 import json
 import os
 
+import cv2
 import numpy as np
+
+from pxrd2xy.core import load_rgb
+
+
+def draw_llm_overlay(panel: dict, entry: dict, figs_dir: str) -> str | None:
+    """The model's claimed values, plotted back onto the faded panel.
+
+    No score is attached to this view on purpose. The model's numbers were not derived
+    from the pixels, so pixel agreement is not their test -- the person checking the
+    panel is. What the drawing needs is only the plot box and an axis range: value ->
+    fraction of the range -> position inside the box. Points the model places outside
+    the box are clamped to its edge and ringed, so a wrong axis reading shows up as a
+    rim of hollow markers instead of as nothing.
+    """
+    fr = panel.get("frame") or {}
+    ax = panel.get("axis") or {}
+    sc = panel.get("work_scale") or 1.0
+    img_path = panel.get("panel_image", "")
+    if not fr or not os.path.exists(img_path):
+        return None
+    xr, yr = ax.get("x_range"), ax.get("y_range")
+    if not xr and entry.get("x_min") is not None:
+        xr = [entry["x_min"], entry["x_max"]]
+    if not yr and entry.get("y_min") is not None:
+        yr = [entry["y_min"], entry["y_max"]]
+    if not (xr and yr) or xr[1] == xr[0] or yr[1] == yr[0]:
+        return None
+    rgb = load_rgb(img_path)
+    img = (rgb.astype(np.float32) * 0.25 + 255 * 0.75).astype(np.uint8)
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    L, R = fr["left"] / sc, fr["right"] / sc
+    T, B = fr["top"] / sc, fr["bottom"] / sc
+    pal = [(60, 60, 210), (200, 60, 60), (40, 150, 60), (170, 90, 190), (30, 140, 190)]
+    H, W = img.shape[:2]
+    clamped = 0
+    for i, srs in enumerate(entry.get("series", [])):
+        col = pal[i % len(pal)]
+        for q in srs.get("points", []):
+            if not isinstance(q, dict) or q.get("x") is None or q.get("y") is None:
+                continue
+            x = L + (q["x"] - xr[0]) / (xr[1] - xr[0]) * (R - L)
+            y = B + (q["y"] - yr[0]) / (yr[1] - yr[0]) * (T - B)
+            inside = (L - 4 <= x <= R + 4) and (T - 4 <= y <= B + 4)
+            cx = int(round(min(max(x, L), R)))
+            cy = int(round(min(max(y, T), B)))
+            if 0 <= cx < W and 0 <= cy < H:
+                if inside:
+                    cv2.circle(img, (cx, cy), 4, col, -1, cv2.LINE_AA)
+                else:
+                    cv2.circle(img, (cx, cy), 5, col, 2, cv2.LINE_AA)
+                    clamped += 1
+    if clamped:
+        cv2.putText(img, f"{clamped} points outside the plot box (rings, clamped)",
+                    (int(L), max(14, int(T) - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+                    (30, 30, 200), 1, cv2.LINE_AA)
+    name = os.path.basename(img_path)[:-4] + "__llm.png"
+    os.makedirs(figs_dir, exist_ok=True)
+    cv2.imwrite(os.path.join(figs_dir, name), img)
+    return name
 
 
 def llm_curves(entry: dict, panel: dict, model: str) -> list:
@@ -81,6 +141,9 @@ def main():
                 c["method"] = "pixels"
             entry = llm.get(pid) or {}
             lc = llm_curves(entry, p, a.model)
+            ov = draw_llm_overlay(p, entry, os.path.join(os.path.dirname(a.corpus), "figs"))
+            if ov:
+                p["llm_overlay"] = ov
             sc = scores.get(pid)
             if sc:
                 for c in lc:

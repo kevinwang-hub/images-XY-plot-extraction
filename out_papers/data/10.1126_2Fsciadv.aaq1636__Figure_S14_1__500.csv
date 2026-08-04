@@ -3,6 +3,7 @@
 # technique: tga  material: X-pcu-3-Zn-3i-γ
 # series: X-pcu-3-Zn-3i-γ (derivative/second trace)  (unknown)
 # x:    y: data units from y ticks
+# read by: pixels
 x,y
 180.00000,9.851485
 180.50000,9.851485

@@ -1,0 +1,18 @@
+# paper: 10.1126%2Fsciadv.aaq1636
+# figure: Figure S4  panel: Figure_S4_1
+# technique: gas_adsorption_isotherm  material: X-pcu-3-Zn-3i-γ (shape-memory phase)
+# series: X-pcu-3-Zn-3i-γ (shape-memory phase)  (experimental)
+# x: Pressure (kPa)   y: arb. units, 0 = bottom axis, 1 = top of plot box
+x,y
+-15.14774,0.368541
+42.67313,0.162163
+43.93931,0.252754
+46.56973,0.162263
+46.57024,0.252883
+56.46262,0.252852
+56.46271,0.162327
+66.66572,0.258132
+66.66964,0.167647
+69.21698,0.258312
+103.47989,0.253008
+103.48588,0.162230

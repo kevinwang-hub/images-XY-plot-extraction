@@ -3,6 +3,7 @@
 # technique: magnetic_susceptibility  material: [CoSr(pydc)2(H2O)6]2n·H2O (3)
 # series: [CoSr(pydc)2(H2O)6]2n·H2O (3)  (experimental)
 # x: T/K   y: data units from y ticks
+# read by: pixels
 x,y
 -3.91566,0.267143
 -3.61446,0.267143

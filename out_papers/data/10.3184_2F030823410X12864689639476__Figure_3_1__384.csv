@@ -1,8 +1,9 @@
 # paper: 10.3184%2F030823410X12864689639476
 # figure: Figure 3  panel: Figure_3_1
-# technique: photoluminescence  material: [CuCl2(pyridine-4-carbonitrile)2]n or [CoCl2(pyridine-4-carbonitrile)2]n
-# series: 384 nm emission band (compound not specified in provided text)  (experimental)
+# technique: photoluminescence  material: [CuCl2(pyridine-4-carbonitrile)2]n (complex 2)
+# series: [CuCl2(pyridine-4-carbonitrile)2]n  (experimental)
 # x: (b)   y: data units from y ticks
+# read by: pixels
 x,y
 309.60334,3.817639
 310.02088,3.817639

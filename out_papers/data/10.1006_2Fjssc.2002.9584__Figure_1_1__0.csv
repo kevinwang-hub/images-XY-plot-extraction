@@ -1,8 +1,9 @@
 # paper: 10.1006%2Fjssc.2002.9584
 # figure: Figure 1  panel: Figure_1_1
 # technique: pxrd  material: CPO-2-Cu, [Cu(ndc)(pyridine)]
-# series: [Cu(ndc)(pyridine)] (CPO-2-Cu)  (experimental)
+# series: CPO-2-Cu, [Cu(ndc)(pyridine)]  (experimental)
 # x: 2-Theta, deg   y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 2.18854,0.482877
 2.19109,0.482877

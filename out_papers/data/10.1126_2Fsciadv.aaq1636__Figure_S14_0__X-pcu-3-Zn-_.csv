@@ -1,8 +1,9 @@
 # paper: 10.1126%2Fsciadv.aaq1636
 # figure: Figure S14  panel: Figure_S14_0
 # technique: tga  material: X-pcu-3-Zn-3i
-# series: X-pcu-3-Zn-3i-α (as-synthesized, ~6 DMF per formula unit)  (experimental)
+# series: X-pcu-3-Zn-3i-α (as-synthesized)  (experimental)
 # x:    y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 235.00000,0.985734
 236.00000,0.987092

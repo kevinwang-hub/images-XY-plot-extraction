@@ -149,7 +149,12 @@ def process_paper(pdf_path: str, outdir: str, client=None, dpi: int = 300,
                      figure_status=d.get("figure_status"),
                      y_units=d.get("y_units"), warnings=d.get("warnings", []),
                      overlay=d.get("overlay"), diff=d.get("diff"),
-                     replot=d.get("replot"), roundtrip=d.get("roundtrip"))
+                     replot=d.get("replot"), roundtrip=d.get("roundtrip"),
+                     # The plot box in pixels. Without it, nothing downstream can put a
+                     # value *back onto the panel image* -- which is exactly what
+                     # comparing an independent reading against the figure requires, and
+                     # its absence is why the model overlays rendered as "no output".
+                     frame=d.get("frame"), work_scale=d.get("work_scale"))
         entry["curves"] = d.get("curves", [])
 
         if entry["curves"]:

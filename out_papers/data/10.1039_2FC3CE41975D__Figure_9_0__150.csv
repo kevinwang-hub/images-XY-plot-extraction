@@ -3,6 +3,7 @@
 # technique: magnetic_susceptibility  material: [CuSr(pydc)2(H2O)4]n (2)
 # series: [CuSr(pydc)2(H2O)4]n (2)  (experimental)
 # x: TIK   y: data units from y ticks
+# read by: pixels
 x,y
 9.73192,0.020881
 13.08042,0.049740

@@ -3,6 +3,7 @@
 # technique: magnetic_susceptibility  material: [NiSr2(pydc)3(H2O)8]n·2nH2O (6)
 # series: [NiSr2(pydc)3(H2O)8]n·2nH2O (6)  (experimental)
 # x: T/K   y: data units from y ticks
+# read by: pixels
 x,y
 0.24570,0.394831
 50.00000,0.394831

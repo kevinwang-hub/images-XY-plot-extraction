@@ -1,8 +1,9 @@
 # paper: 10.3184%2F030823410X12864689639476
 # figure: Figure 3  panel: Figure_3_0
 # technique: photoluminescence  material: [CuCl2(pyridine-3-carbonitrile)2]n
-# series: [CuCl2(pyridine-3-carbonitrile)2]n (complex 1) — excitation  (experimental)
+# series: [CuCl2(pyridine-3-carbonitrile)2]n (complex 1)  (experimental)
 # x: (a)   y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 325.33784,0.058484
 325.67568,0.058484

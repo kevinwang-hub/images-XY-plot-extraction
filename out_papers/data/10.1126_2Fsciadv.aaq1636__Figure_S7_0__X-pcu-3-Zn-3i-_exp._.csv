@@ -1,8 +1,9 @@
 # paper: 10.1126%2Fsciadv.aaq1636
 # figure: Figure S7  panel: Figure_S7_0
-# technique: pxrd  material: X-pcu-3-Zn-3i
+# technique: pxrd  material: X-pcu-3-Zn-3i (porous interpenetrated coordination network)
 # series: X-pcu-3-Zn-3i-α  (experimental)
 # x: 2θ (theta)   y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 5.31561,0.219770
 5.34053,0.219770

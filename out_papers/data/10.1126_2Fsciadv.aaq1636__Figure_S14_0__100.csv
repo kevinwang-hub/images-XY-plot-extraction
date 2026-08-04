@@ -3,6 +3,7 @@
 # technique: tga  material: X-pcu-3-Zn-3i
 # series: X-pcu-3-Zn-3i-β  (experimental)
 # x:    y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 227.00000,0.193614
 228.00000,0.193614

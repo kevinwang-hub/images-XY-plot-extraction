@@ -10,24 +10,64 @@ import os
 import cv2
 import numpy as np
 
-from pxrd2xy.core import load_rgb
+from pxrd2xy.core import load_rgb as _load_rgb
 from pxrd2xy.report import CSS
+
+
+def load_rgb(path, tries: int = 4):
+    """Per-file retry. This page is often built while another process is embedding
+    hundreds of images from the same disk, and a single transient read failure should
+    cost one retry, not the whole page."""
+    import time
+    for i in range(tries):
+        try:
+            return _load_rgb(path)
+        except OSError:
+            if i == tries - 1:
+                raise
+            time.sleep(2.0 * (i + 1))
 
 OUT = "out_scatter_cmp"
 
 
-def overlay(panel_png, pixel_curves, llm_series, path, mode):
+def overlay(panel_png, pixel_curves, llm_series, path, mode, box=None):
+    """Draw one reader's points over the faded panel.
+
+    Model points that fall outside the plot box are clamped to its edge and drawn as
+    rings rather than dropped: a reading with the wrong axis exponent then shows up as a
+    rim of hollow markers -- visibly wrong -- instead of as an empty image, which reads
+    as "produced nothing" when the model in fact produced values.
+    """
     rgb = load_rgb(panel_png)
     img = (rgb.astype(np.float32) * 0.22 + 255 * 0.78).astype(np.uint8)
     img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
     pal = [(200, 60, 60), (60, 60, 210), (40, 150, 60), (170, 90, 190), (30, 140, 190)]
     src = pixel_curves if mode == "pixels" else llm_series
+    H, W = img.shape[:2]
+    clamped = 0
     for i, (xs, ys) in enumerate(src):
         col = pal[i % len(pal)]
         for x, y in zip(xs, ys):
-            cv2.circle(img, (int(round(x)), int(round(y))), 2 if mode == "pixels" else 4,
-                       col, -1, cv2.LINE_AA)
+            inside = box is None or (box[0] - 4 <= x <= box[1] + 4
+                                     and box[2] - 4 <= y <= box[3] + 4)
+            if box is not None:
+                x = min(max(x, box[0]), box[1])
+                y = min(max(y, box[2]), box[3])
+            cx, cy = int(round(x)), int(round(y))
+            if not (0 <= cx < W and 0 <= cy < H):
+                continue
+            if inside:
+                cv2.circle(img, (cx, cy), 2 if mode == "pixels" else 4, col, -1,
+                           cv2.LINE_AA)
+            else:
+                cv2.circle(img, (cx, cy), 5, col, 2, cv2.LINE_AA)
+                clamped += 1
+    if clamped and box is not None:
+        cv2.putText(img, f"{clamped} points outside the plot box (rings, clamped)",
+                    (int(box[0]), max(14, int(box[2]) - 6)), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.45, (30, 30, 200), 1, cv2.LINE_AA)
     cv2.imwrite(path, img)
+    return clamped
 
 
 def uri(path, max_w=460):
@@ -84,14 +124,19 @@ def main():
                 a = np.asarray(pts, float)
                 ls.append((L + (a[:, 0] - xr[0]) / (xr[1] - xr[0]) * (R - L),
                            B + (a[:, 1] - yr[0]) / (yr[1] - yr[0]) * (T - B)))
+        box = None
+        if fr:
+            box = (fr["left"] / sc, fr["right"] / sc, fr["top"] / sc, fr["bottom"] / sc)
         imgs = []
         for mode, src in (("pixels", pc), ("model", ls)):
             if not src:
                 imgs.append((mode, ""))
                 continue
             fp = os.path.join(OUT, "img", f"{pid}__{mode}.png")
-            overlay(p["panel_image"], pc, ls, fp, mode)
-            imgs.append((mode, uri(fp)))
+            n_out = overlay(p["panel_image"], pc, ls, fp, mode,
+                            box if mode == "model" else None)
+            lab = mode + (f" · {n_out} pts outside box" if n_out else "")
+            imgs.append((lab, uri(fp)))
         t = r["trend_pct"]
         cls = "bad" if (np.isfinite(t) and t > 5) else ("mid" if np.isfinite(t) and t > 3 else "good")
         cards.append(
@@ -154,8 +199,8 @@ wherever an axis was never calibrated — 28 of these 53 panels.</p>
 <td>{band(tr,3)}/{len(tr)}</td><td>{band(tr,5)}/{len(tr)}</td></tr>
 </tbody></table>
 <p class="note">On the typical panel the sparse reading is good: the model's points sit
-about half a percent of the plot box from real data, and joining them up reproduces the
-curve to within a few percent. That is enough for a trend, and it is the case for
+{np.median(acc):.1f}% of the plot box from real data, and joining them up reproduces the
+curve to within {np.median(tr):.1f}%. That is enough for a trend, and it is the case for
 pooling the model's output rather than discarding it.
 <b>The tail is the problem.</b> Roughly a quarter of panels are outside 5%, and a few are
 wrong by orders of magnitude — all of them magnetic-susceptibility plots whose axes span

@@ -3,6 +3,7 @@
 # technique: gas_adsorption_isotherm  material: X-pcu-3-Zn-3i
 # series: X-pcu-3-Zn-3i  (experimental)
 # x: P (bar)   y: data units from y ticks
+# read by: pixels
 x,y
 0.25210,29.176201
 0.28361,29.176201

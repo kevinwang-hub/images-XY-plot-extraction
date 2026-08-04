@@ -1,8 +1,9 @@
 # paper: 10.3184%2F174751917X14956302352017
 # figure: Figure 3  panel: Figure_3_0
-# technique: tga  material: CuII tetrachloroterephthalate coordination polymers 1 and 2
-# series: Complex 1 (CuII/BDC–Cl4 coordination polymer)  (experimental)
+# technique: tga  material: 
+# series: 1  (experimental)
 # x: Temperature (*c)   y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 378.41410,0.876154
 378.85463,0.874615

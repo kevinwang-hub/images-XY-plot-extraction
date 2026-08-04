@@ -1,0 +1,15 @@
+# paper: 10.1039%2FC3CE41975D
+# figure: Figure 11  panel: Figure_11_0
+# technique: magnetic_susceptibility  material: [NiSr2(pydc)3(H2O)8]n·2nH2O (6)
+# series: [NiSr2(pydc)3(H2O)8]n·2nH2O (6)  (experimental)
+# x: T/K   y: data units from y ticks
+x,y
+0.24570,0.394831
+50.00000,0.394831
+100.36855,0.394831
+133.12053,0.191301
+133.22365,0.149739
+150.12285,0.394831
+200.20475,0.395033
+250.24570,0.394831
+300.07088,0.394793

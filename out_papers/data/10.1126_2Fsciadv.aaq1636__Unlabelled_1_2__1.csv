@@ -3,6 +3,7 @@
 # technique: gas_adsorption_isotherm  material: X-pcu-3-Zn-3i
 # series: X-pcu-3-Zn-3i-β (desorption branch)  (experimental)
 # x: Pressure (Pa)   y: arb. units, 0 = bottom axis, 1 = top of plot box
+# read by: pixels
 x,y
 167.00000,0.923913
 167.50000,0.923913
