@@ -1,7 +1,67 @@
 <!doctype html>
-<meta charset="utf-8">
-<title>PXRD figure → xy digitisation</title>
-<meta http-equiv="refresh" content="0; url=out/report.html">
-<p style="font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
-          margin:40px">Opening the verification dashboard —
-<a href="out/report.html">out/report.html</a> (9.9 MB, self-contained).</p>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Figures → xy data</title>
+<style>
+:root{color-scheme:light dark}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+     background:var(--bg);color:var(--tx)}
+:root{--bg:#fcfcfb;--surf:#ffffff;--tx:#0b0b0b;--tx2:#52514e;--tx3:#8a8984;--line:#e6e5e0;--acc:#2a78d6}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme=light])){
+      --bg:#161615;--surf:#1f1f1e;--tx:#ffffff;--tx2:#c3c2b7;--tx3:#8e8d85;--line:#33332f;--acc:#3987e5}}
+:root[data-theme=dark]{--bg:#161615;--surf:#1f1f1e;--tx:#fff;--tx2:#c3c2b7;--tx3:#8e8d85;
+      --line:#33332f;--acc:#3987e5}
+.wrap{max-width:900px;margin:0 auto;padding:56px 20px 80px}
+h1{font-size:24px;margin:0 0 6px;letter-spacing:-.01em}
+.sub{color:var(--tx2);margin:0 0 34px;font-size:14px;max-width:62ch}
+a.card{display:block;text-decoration:none;color:inherit;background:var(--surf);
+       border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:14px}
+a.card:hover{border-color:var(--acc)}
+.card h2{font-size:17px;margin:0 0 6px;letter-spacing:-.01em}
+.card p{margin:0 0 12px;color:var(--tx2);font-size:13.5px;max-width:64ch}
+.card code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.nums{display:flex;gap:22px;flex-wrap:wrap}
+.nums div{font-size:12px;color:var(--tx3)}
+.nums b{display:block;font-size:19px;font-weight:600;color:var(--tx);letter-spacing:-.02em;
+        font-variant-numeric:tabular-nums}
+.go{color:var(--acc);font-size:13px;margin-top:12px;display:block}
+.foot{color:var(--tx3);font-size:12.5px;margin-top:30px;max-width:64ch}
+.foot a{color:var(--acc)}
+</style></head><body><div class="wrap">
+
+<h1>Figures → xy data</h1>
+<p class="sub">Turning published plots back into the numbers they were drawn from, and
+checking every one of them. Two dashboards: the whole-PDF pipeline, and the figure-level
+engine it is built on.</p>
+
+<a class="card" href="out_papers/report.html">
+  <h2>Papers → xy data</h2>
+  <p>Start from a PDF. Every figure region is rendered, split into panels by axis geometry,
+  classified by a vision model, digitised by the pixel engine, and each curve's identity
+  recovered from the paper's own text — so a curve labelled <code>1a</code> comes out named.
+  Includes what was tried at each stage, and where it still falls short.</p>
+  <div class="nums">
+    <div><b>12</b>papers</div><div><b>97</b>figures</div><div><b>28</b>panels digitised</div>
+    <div><b>126</b>curves</div><div><b>94,248</b>points</div><div><b>0.24%</b>median deviation</div>
+  </div>
+  <span class="go">Open the pipeline dashboard →</span>
+</a>
+
+<a class="card" href="out/report.html">
+  <h2>PXRD figure → xy data</h2>
+  <p>The engine underneath: OCR-calibrated axes, colour decomposition, a segment-connectivity
+  graph, pen-width deconvolution to the true centre line, and round-trip verification that
+  re-plots the extracted data and compares it against the original ink.</p>
+  <div class="nums">
+    <div><b>53</b>figures</div><div><b>209</b>curves</div><div><b>195,658</b>points</div>
+    <div><b>0.72</b>median line overlap</div><div><b>0.25%</b>median deviation</div>
+  </div>
+  <span class="go">Open the verification dashboard →</span>
+</a>
+
+<p class="foot">Both pages are self-contained and a few MB each — every image is embedded, so
+they work offline. Code, data and per-curve CSVs are in the
+<a href="https://github.com/kevinwang-hub/images-XY-plot-extraction">repository</a>.</p>
+
+</div></body></html>
