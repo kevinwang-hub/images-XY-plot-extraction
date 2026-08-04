@@ -41,19 +41,19 @@ METHOD_HTML = """
 
 <tr><td><b>A plot of points</b></td>
 <td>Trace a path through them; <b>one point per symbol</b></td>
-<td><b>One symbol, one value, at its centre — and nothing in between.</b> A scatter states its values at the pressures that were measured and says nothing between them, so no path is fitted through the points and no line is drawn joining them, in the data or in any verification view. This is also what settles hysteresis: a loop is not a function and any single path through it has to cross from one arm to the other, but as points there is nothing to cross.</td></tr>
+<td><b>One symbol, one value, at its centre — and nothing in between.</b> A scatter states its values at the pressures that were measured and says nothing between them, so no path is fitted through the points and no line is drawn joining them, in the data or in any verification view. This is also what settles hysteresis: a loop is not a function and any single path through it must cross from one arm to the other, but as points there is nothing to cross.</td></tr>
 
-<tr><td><b>Which points are one series</b></td>
-<td>Colour-cluster the pixels; <b>group the symbols</b></td>
-<td><b>Group the symbols, not the pixels.</b> Pixels are the wrong unit for a scatter: every symbol carries a halo of blended edge pixels, so one series arrives as a saturated cluster plus a pale one — which is how a magnetic panel lost every point above 100 K to a grey "halo" cluster. A symbol has one colour, averaged over its whole body and therefore stable, one size and one fill, and a series is a group agreeing on all three. Shades that differ only along the line joining them to the background are the same pen drawn over itself and are merged; that alone turned one blue isotherm back from six series into two. Solid and open symbols of one colour stay separate — that is how the figure's own legend distinguishes adsorption from desorption.</td></tr>
+<tr><td><b>Telling scatter series apart</b></td>
+<td>Cluster the pixels; <b>group the symbols</b></td>
+<td><b>Group the symbols.</b> Colour decomposition works on pixels, and on a scatter that is the wrong unit: every symbol carries a halo of blended edge pixels, so one series arrives as a saturated cluster plus a pale one — which is how a magnetic panel lost every point above 100 K to a grey "halo" cluster while its own colour kept the rest. A symbol is a better unit: it has one colour, averaged over its whole body and therefore stable, one size and one fill. Series are groups agreeing on all three, with solid and open symbols of one colour kept apart. Two centres that differ only in how far they sit along the line toward the background are the same series drawn over itself — merging those turned one blue isotherm back from six series into two.</td></tr>
 
-<tr><td><b>Data deleted before it was read</b></td>
-<td>—</td>
-<td><b>Three filters were eating markers.</b> The glyph filter, because a marker and a stray character are both small compact blobs — a glyph is one of a few and a marker one of many identical, so the modal size band is now exempt. The OCR filter, because a row of evenly spaced markers reads as a line of text: on one panel it was recognised as a CJK glyph and the series' whole high-temperature tail was deleted, so a text box covering three or more identical markers is now treated as a misread. And the size band itself, anchored to a median that anti-aliasing fragments drag down, which discarded symbols for being too <i>large</i>.</td></tr>
+<tr><td><b>Markers deleted before tracing</b></td>
+<td>Text filters as written; <b>a marker is one of many</b></td>
+<td><b>Three filters were eating the data.</b> The glyph filter could not tell a data marker from a stray character one at a time — but a glyph is one of a few and a marker is one of many identical, so the modal size of the equant blobs is found first and that band is exempt. OCR read a row of markers as a CJK glyph and the text filter deleted the whole high-temperature tail of a series; a text box covering three or more identical markers is now treated as a misread. And the symbol-size band was anchored to a median that anti-aliasing fragments drag down, so genuinely <i>large</i> symbols fell outside it and were discarded.</td></tr>
 
-<tr><td><b>A guide line through a scatter</b></td>
-<td>Digitise it as a series; <b>drop it</b></td>
-<td><b>Decoration, not data.</b> Papers join measured points with a line so the eye can follow them; it states no value the points do not already state and draws values between measurements that were never made. Two things identify it, and both are comparisons <i>within</i> one panel, which is what makes them safe: it is markedly thinner than the symbols it serves, and it runs along them. Neither test alone would do — a thin curve going its own way is data, and a thick series lying near another is two real series that overlap.</td></tr>
+<tr><td><b>Verifying a scatter</b></td>
+<td>Match the rendered symbols; <b>a dot at each centre</b></td>
+<td><b>Stop comparing shapes.</b> A scatter is re-drawn as a small dot at each centre — what was read — not as the symbols the paper used. Comparing that against the original ink measures the pen, not the reading: the centre of an open circle is background, so a perfectly read ring scored as landing off ink. Area overlap, lands-on-ink, coverage and deviation are all dropped from the gate for point series. What remains is exact and shape-independent — every point sitting on ink of its own colour — plus a deviation measured against the nearest symbol <i>centre</i> in its column, since a column can hold two symbols of one series, one on each arm of a loop, and there is no single right height.</td></tr>
 
 <tr><td><b>Not-a-series colours</b></td>
 <td>Trust the clustering; <b>test the best path</b></td>
